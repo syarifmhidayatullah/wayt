@@ -9,6 +9,17 @@
 </head>
 <body class="bg-gray-100 min-h-screen" x-data="app()" x-init="init()">
 
+  <!-- Full page loading overlay -->
+  <div x-show="pageLoading" class="fixed inset-0 bg-white flex items-center justify-center z-[100]">
+    <div class="flex flex-col items-center gap-3">
+      <svg class="animate-spin w-8 h-8 text-blue-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"></path>
+      </svg>
+      <p class="text-sm text-gray-400">Memuat data...</p>
+    </div>
+  </div>
+
   <!-- Login screen -->
   <div x-show="!authenticated" class="min-h-screen flex items-center justify-center p-4">
     <div class="bg-white rounded-2xl shadow-lg p-8 w-full max-w-sm">
@@ -134,21 +145,32 @@
         <div class="flex flex-wrap gap-2 px-6 py-4 border-b border-gray-100">
           <button
             @click="generateQR(branch)"
-            class="bg-indigo-50 text-indigo-600 px-4 py-2 rounded-xl text-sm font-medium hover:bg-indigo-100 transition"
-          >Generate QR</button>
+            :disabled="isActionLoading(branch.id, 'qr')"
+            class="bg-indigo-50 text-indigo-600 px-4 py-2 rounded-xl text-sm font-medium hover:bg-indigo-100 transition disabled:opacity-50 flex items-center gap-2"
+          >
+            <svg x-show="isActionLoading(branch.id, 'qr')" class="animate-spin w-3.5 h-3.5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"></path></svg>
+            <span x-text="isActionLoading(branch.id, 'qr') ? 'Generating...' : 'Generate QR'"></span>
+          </button>
           <button
             @click="callNext(branch)"
-            :disabled="(branchQueues[branch.id] || []).filter(q => q.status === 'waiting').length === 0"
-            class="bg-green-50 text-green-600 px-4 py-2 rounded-xl text-sm font-medium hover:bg-green-100 transition disabled:opacity-40 disabled:cursor-not-allowed"
-          >Panggil Berikutnya</button>
+            :disabled="(branchQueues[branch.id] || []).filter(q => q.status === 'waiting').length === 0 || isActionLoading(branch.id, 'next')"
+            class="bg-green-50 text-green-600 px-4 py-2 rounded-xl text-sm font-medium hover:bg-green-100 transition disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-2"
+          >
+            <svg x-show="isActionLoading(branch.id, 'next')" class="animate-spin w-3.5 h-3.5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"></path></svg>
+            <span x-text="isActionLoading(branch.id, 'next') ? 'Memanggil...' : 'Panggil Berikutnya'"></span>
+          </button>
           <button
             @click="confirmReset(branch)"
             class="bg-red-50 text-red-500 px-4 py-2 rounded-xl text-sm font-medium hover:bg-red-100 transition"
           >Reset Antrian</button>
           <button
             @click="refreshQueue(branch.id)"
-            class="bg-gray-50 text-gray-500 px-4 py-2 rounded-xl text-sm font-medium hover:bg-gray-100 transition"
-          >Refresh</button>
+            :disabled="isActionLoading(branch.id, 'refresh')"
+            class="bg-gray-50 text-gray-500 px-4 py-2 rounded-xl text-sm font-medium hover:bg-gray-100 transition disabled:opacity-50 flex items-center gap-2"
+          >
+            <svg x-show="isActionLoading(branch.id, 'refresh')" class="animate-spin w-3.5 h-3.5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"></path></svg>
+            <span x-text="isActionLoading(branch.id, 'refresh') ? 'Memuat...' : 'Refresh'"></span>
+          </button>
         </div>
 
         <!-- QR result -->
@@ -209,8 +231,11 @@
       </div>
 
       <div class="bg-white rounded-2xl shadow overflow-hidden">
-        <div x-show="adminUsers.length === 0" class="p-8 text-center text-gray-400 text-sm">Belum ada user.</div>
-        <table x-show="adminUsers.length > 0" class="w-full text-sm">
+        <div x-show="loadingUsers" class="p-8 flex justify-center">
+          <svg class="animate-spin w-6 h-6 text-blue-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"></path></svg>
+        </div>
+        <div x-show="!loadingUsers && adminUsers.length === 0" class="p-8 text-center text-gray-400 text-sm">Belum ada user.</div>
+        <table x-show="!loadingUsers && adminUsers.length > 0" class="w-full text-sm">
           <thead class="bg-gray-50 text-gray-400 text-xs uppercase tracking-widest">
             <tr>
               <th class="px-6 py-3 text-left">Username</th>
@@ -271,8 +296,11 @@
       </template>
       <p x-show="modalError" class="text-red-500 text-xs mb-3" x-text="modalError"></p>
       <div class="flex gap-2">
-        <button @click="closeModal()" class="flex-1 border border-gray-200 rounded-xl py-2.5 text-sm hover:bg-gray-50">Batal</button>
-        <button @click="saveBranch()" class="flex-1 bg-blue-600 text-white rounded-xl py-2.5 text-sm font-semibold hover:bg-blue-700">Simpan</button>
+        <button @click="closeModal()" :disabled="savingBranch" class="flex-1 border border-gray-200 rounded-xl py-2.5 text-sm hover:bg-gray-50 disabled:opacity-50">Batal</button>
+        <button @click="saveBranch()" :disabled="savingBranch" class="flex-1 bg-blue-600 text-white rounded-xl py-2.5 text-sm font-semibold hover:bg-blue-700 disabled:opacity-50 flex items-center justify-center gap-2">
+          <svg x-show="savingBranch" class="animate-spin w-3.5 h-3.5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"></path></svg>
+          <span x-text="savingBranch ? 'Menyimpan...' : 'Simpan'"></span>
+        </button>
       </div>
     </div>
   </div>
@@ -283,8 +311,11 @@
       <h2 class="font-bold text-gray-800 mb-2">Reset Antrian?</h2>
       <p class="text-sm text-gray-500 mb-4">Semua antrian aktif di <strong x-text="(resetTarget || {}).name"></strong> akan kedaluwarsa dan nomor direset ke 0.</p>
       <div class="flex gap-2">
-        <button @click="resetTarget = null" class="flex-1 border border-gray-200 rounded-xl py-2.5 text-sm hover:bg-gray-50">Batal</button>
-        <button @click="doReset()" class="flex-1 bg-red-500 text-white rounded-xl py-2.5 text-sm font-semibold hover:bg-red-600">Reset</button>
+        <button @click="resetTarget = null" :disabled="loadingReset" class="flex-1 border border-gray-200 rounded-xl py-2.5 text-sm hover:bg-gray-50 disabled:opacity-50">Batal</button>
+        <button @click="doReset()" :disabled="loadingReset" class="flex-1 bg-red-500 text-white rounded-xl py-2.5 text-sm font-semibold hover:bg-red-600 disabled:opacity-50 flex items-center justify-center gap-2">
+          <svg x-show="loadingReset" class="animate-spin w-3.5 h-3.5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"></path></svg>
+          <span x-text="loadingReset ? 'Mereset...' : 'Reset'"></span>
+        </button>
       </div>
     </div>
   </div>
@@ -295,8 +326,11 @@
       <h2 class="font-bold text-gray-800 mb-2">Hapus Branch?</h2>
       <p class="text-sm text-gray-500 mb-4">Branch <strong x-text="(deleteTarget || {}).name"></strong> akan dihapus permanen.</p>
       <div class="flex gap-2">
-        <button @click="deleteTarget = null" class="flex-1 border border-gray-200 rounded-xl py-2.5 text-sm hover:bg-gray-50">Batal</button>
-        <button @click="doDelete()" class="flex-1 bg-red-500 text-white rounded-xl py-2.5 text-sm font-semibold hover:bg-red-600">Hapus</button>
+        <button @click="deleteTarget = null" :disabled="loadingDelete" class="flex-1 border border-gray-200 rounded-xl py-2.5 text-sm hover:bg-gray-50 disabled:opacity-50">Batal</button>
+        <button @click="doDelete()" :disabled="loadingDelete" class="flex-1 bg-red-500 text-white rounded-xl py-2.5 text-sm font-semibold hover:bg-red-600 disabled:opacity-50 flex items-center justify-center gap-2">
+          <svg x-show="loadingDelete" class="animate-spin w-3.5 h-3.5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"></path></svg>
+          <span x-text="loadingDelete ? 'Menghapus...' : 'Hapus'"></span>
+        </button>
       </div>
     </div>
   </div>
@@ -325,8 +359,11 @@
       </select>
       <p x-show="userModalError" class="text-red-500 text-xs mb-3" x-text="userModalError"></p>
       <div class="flex gap-2">
-        <button @click="closeUserModal()" class="flex-1 border border-gray-200 rounded-xl py-2.5 text-sm hover:bg-gray-50">Batal</button>
-        <button @click="saveUser()" class="flex-1 bg-blue-600 text-white rounded-xl py-2.5 text-sm font-semibold hover:bg-blue-700">Simpan</button>
+        <button @click="closeUserModal()" :disabled="savingUser" class="flex-1 border border-gray-200 rounded-xl py-2.5 text-sm hover:bg-gray-50 disabled:opacity-50">Batal</button>
+        <button @click="saveUser()" :disabled="savingUser" class="flex-1 bg-blue-600 text-white rounded-xl py-2.5 text-sm font-semibold hover:bg-blue-700 disabled:opacity-50 flex items-center justify-center gap-2">
+          <svg x-show="savingUser" class="animate-spin w-3.5 h-3.5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"></path></svg>
+          <span x-text="savingUser ? 'Menyimpan...' : 'Simpan'"></span>
+        </button>
       </div>
     </div>
   </div>
@@ -337,8 +374,11 @@
       <h2 class="font-bold text-gray-800 mb-2">Hapus User?</h2>
       <p class="text-sm text-gray-500 mb-4">User <strong x-text="(deleteUserTarget || {}).username"></strong> akan dihapus permanen.</p>
       <div class="flex gap-2">
-        <button @click="deleteUserTarget = null" class="flex-1 border border-gray-200 rounded-xl py-2.5 text-sm hover:bg-gray-50">Batal</button>
-        <button @click="doDeleteUser()" class="flex-1 bg-red-500 text-white rounded-xl py-2.5 text-sm font-semibold hover:bg-red-600">Hapus</button>
+        <button @click="deleteUserTarget = null" :disabled="loadingDeleteUser" class="flex-1 border border-gray-200 rounded-xl py-2.5 text-sm hover:bg-gray-50 disabled:opacity-50">Batal</button>
+        <button @click="doDeleteUser()" :disabled="loadingDeleteUser" class="flex-1 bg-red-500 text-white rounded-xl py-2.5 text-sm font-semibold hover:bg-red-600 disabled:opacity-50 flex items-center justify-center gap-2">
+          <svg x-show="loadingDeleteUser" class="animate-spin w-3.5 h-3.5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"></path></svg>
+          <span x-text="loadingDeleteUser ? 'Menghapus...' : 'Hapus'"></span>
+        </button>
       </div>
     </div>
   </div>
@@ -347,6 +387,7 @@
     function app() {
       return {
         authenticated: false,
+        pageLoading: false,
         loginForm: { username: '', password: '' },
         loginError: '',
         loginLoading: false,
@@ -362,21 +403,28 @@
         branchQueues: {},
         qrResults: {},
         calledQueue: {},
+        loadingActions: {},  // { [branchId]: { qr, next, refresh } }
 
         openCreateBranch: false,
         editingBranch: null,
         branchForm: { name: '', prefix: '', is_active: true },
         modalError: '',
+        savingBranch: false,
 
         resetTarget: null,
+        loadingReset: false,
         deleteTarget: null,
+        loadingDelete: false,
 
         adminUsers: [],
+        loadingUsers: false,
         openCreateUser: false,
         editingUser: null,
         userForm: { username: '', password: '', role: 'admin' },
         userModalError: '',
+        savingUser: false,
         deleteUserTarget: null,
+        loadingDeleteUser: false,
 
         init() {
           const saved = localStorage.getItem('wayt_token')
@@ -384,7 +432,8 @@
             this.token = saved
             this.parseToken(saved)
             this.authenticated = true
-            this.loadBranches()
+            this.pageLoading = true
+            this.loadBranches().finally(() => { this.pageLoading = false })
           }
         },
 
@@ -413,7 +462,8 @@
               this.parseToken(this.token)
               this.authenticated = true
               this.loginForm = { username: '', password: '' }
-              this.loadBranches()
+              this.pageLoading = true
+              this.loadBranches().finally(() => { this.pageLoading = false })
             } else {
               this.loginError = 'Username atau password salah.'
             }
@@ -464,56 +514,92 @@
         },
 
         async refreshQueue(branchId) {
-          await this.loadBranches()
+          this.setActionLoading(branchId, 'refresh', true)
+          try {
+            await this.loadBranches()
+          } finally {
+            this.setActionLoading(branchId, 'refresh', false)
+          }
+        },
+
+        setActionLoading(branchId, key, val) {
+          this.loadingActions = {
+            ...this.loadingActions,
+            [branchId]: { ...(this.loadingActions[branchId] || {}), [key]: val }
+          }
+        },
+
+        isActionLoading(branchId, key) {
+          return !!(this.loadingActions[branchId] && this.loadingActions[branchId][key])
         },
 
         async generateQR(branch) {
           this.globalError = ''
-          const res = await this.apiFetch(`/internal/branches/${branch.id}/qr`, { method: 'POST' })
-          if (!res) return
-          const json = await res.json()
-          if (res.ok) {
-            this.qrResults = { ...this.qrResults, [branch.id]: json.data }
-          } else {
-            this.globalError = json.message || 'Gagal generate QR'
+          this.setActionLoading(branch.id, 'qr', true)
+          try {
+            const res = await this.apiFetch(`/internal/branches/${branch.id}/qr`, { method: 'POST' })
+            if (!res) return
+            const json = await res.json()
+            if (res.ok) {
+              this.qrResults = { ...this.qrResults, [branch.id]: json.data }
+            } else {
+              this.globalError = json.message || 'Gagal generate QR'
+            }
+          } finally {
+            this.setActionLoading(branch.id, 'qr', false)
           }
         },
 
         async callNext(branch) {
           this.globalError = ''
-          const res = await this.apiFetch(`/internal/branches/${branch.id}/next`, { method: 'POST' })
-          if (!res) return
-          const json = await res.json()
-          if (res.ok) {
-            this.calledQueue = { ...this.calledQueue, [branch.id]: json.data }
-            await this.loadBranches()
-            setTimeout(() => {
-              const updated = { ...this.calledQueue }
-              delete updated[branch.id]
-              this.calledQueue = updated
-            }, 5000)
-          } else {
-            this.globalError = json.message || 'Tidak ada antrian'
+          this.setActionLoading(branch.id, 'next', true)
+          try {
+            const res = await this.apiFetch(`/internal/branches/${branch.id}/next`, { method: 'POST' })
+            if (!res) return
+            const json = await res.json()
+            if (res.ok) {
+              this.calledQueue = { ...this.calledQueue, [branch.id]: json.data }
+              await this.loadBranches()
+              setTimeout(() => {
+                const updated = { ...this.calledQueue }
+                delete updated[branch.id]
+                this.calledQueue = updated
+              }, 5000)
+            } else {
+              this.globalError = json.message || 'Tidak ada antrian'
+            }
+          } finally {
+            this.setActionLoading(branch.id, 'next', false)
           }
         },
 
         confirmReset(branch) { this.resetTarget = branch },
         async doReset() {
-          const res = await this.apiFetch(`/internal/branches/${this.resetTarget.id}/reset`, { method: 'POST' })
-          if (res && res.ok) {
-            await this.loadBranches()
-            const updated = { ...this.qrResults }
-            delete updated[this.resetTarget.id]
-            this.qrResults = updated
+          this.loadingReset = true
+          try {
+            const res = await this.apiFetch(`/internal/branches/${this.resetTarget.id}/reset`, { method: 'POST' })
+            if (res && res.ok) {
+              await this.loadBranches()
+              const updated = { ...this.qrResults }
+              delete updated[this.resetTarget.id]
+              this.qrResults = updated
+            }
+          } finally {
+            this.loadingReset = false
+            this.resetTarget = null
           }
-          this.resetTarget = null
         },
 
         confirmDelete(branch) { this.deleteTarget = branch },
         async doDelete() {
-          await this.apiFetch(`/internal/branches/${this.deleteTarget.id}`, { method: 'DELETE' })
-          await this.loadBranches()
-          this.deleteTarget = null
+          this.loadingDelete = true
+          try {
+            await this.apiFetch(`/internal/branches/${this.deleteTarget.id}`, { method: 'DELETE' })
+            await this.loadBranches()
+          } finally {
+            this.loadingDelete = false
+            this.deleteTarget = null
+          }
         },
 
         editBranch(branch) {
@@ -534,31 +620,41 @@
             this.modalError = 'Nama dan prefix wajib diisi.'
             return
           }
-          let res
-          if (this.editingBranch) {
-            res = await this.apiFetch(`/internal/branches/${this.editingBranch.id}`, {
-              method: 'PUT', body: JSON.stringify(this.branchForm)
-            })
-          } else {
-            res = await this.apiFetch('/internal/branches', {
-              method: 'POST', body: JSON.stringify(this.branchForm)
-            })
-          }
-          if (!res) return
-          if (res.ok) {
-            await this.loadBranches()
-            this.closeModal()
-          } else {
-            const json = await res.json()
-            this.modalError = json.message || 'Gagal menyimpan'
+          this.savingBranch = true
+          try {
+            let res
+            if (this.editingBranch) {
+              res = await this.apiFetch(`/internal/branches/${this.editingBranch.id}`, {
+                method: 'PUT', body: JSON.stringify(this.branchForm)
+              })
+            } else {
+              res = await this.apiFetch('/internal/branches', {
+                method: 'POST', body: JSON.stringify(this.branchForm)
+              })
+            }
+            if (!res) return
+            if (res.ok) {
+              await this.loadBranches()
+              this.closeModal()
+            } else {
+              const json = await res.json()
+              this.modalError = json.message || 'Gagal menyimpan'
+            }
+          } finally {
+            this.savingBranch = false
           }
         },
 
         async loadUsers() {
-          const res = await this.apiFetch('/internal/users')
-          if (!res) return
-          const json = await res.json()
-          this.adminUsers = json.data || []
+          this.loadingUsers = true
+          try {
+            const res = await this.apiFetch('/internal/users')
+            if (!res) return
+            const json = await res.json()
+            this.adminUsers = json.data || []
+          } finally {
+            this.loadingUsers = false
+          }
         },
 
         editUser(u) {
@@ -583,31 +679,41 @@
             this.userModalError = 'Password wajib diisi.'
             return
           }
-          let res
-          if (this.editingUser) {
-            res = await this.apiFetch(`/internal/users/${this.editingUser.id}`, {
-              method: 'PUT', body: JSON.stringify(this.userForm)
-            })
-          } else {
-            res = await this.apiFetch('/internal/users', {
-              method: 'POST', body: JSON.stringify(this.userForm)
-            })
-          }
-          if (!res) return
-          if (res.ok) {
-            await this.loadUsers()
-            this.closeUserModal()
-          } else {
-            const json = await res.json()
-            this.userModalError = json.message || 'Gagal menyimpan'
+          this.savingUser = true
+          try {
+            let res
+            if (this.editingUser) {
+              res = await this.apiFetch(`/internal/users/${this.editingUser.id}`, {
+                method: 'PUT', body: JSON.stringify(this.userForm)
+              })
+            } else {
+              res = await this.apiFetch('/internal/users', {
+                method: 'POST', body: JSON.stringify(this.userForm)
+              })
+            }
+            if (!res) return
+            if (res.ok) {
+              await this.loadUsers()
+              this.closeUserModal()
+            } else {
+              const json = await res.json()
+              this.userModalError = json.message || 'Gagal menyimpan'
+            }
+          } finally {
+            this.savingUser = false
           }
         },
 
         confirmDeleteUser(u) { this.deleteUserTarget = u },
         async doDeleteUser() {
-          const res = await this.apiFetch(`/internal/users/${this.deleteUserTarget.id}`, { method: 'DELETE' })
-          if (res && res.ok) await this.loadUsers()
-          this.deleteUserTarget = null
+          this.loadingDeleteUser = true
+          try {
+            const res = await this.apiFetch(`/internal/users/${this.deleteUserTarget.id}`, { method: 'DELETE' })
+            if (res && res.ok) await this.loadUsers()
+          } finally {
+            this.loadingDeleteUser = false
+            this.deleteUserTarget = null
+          }
         },
 
         formatDate(str) {
