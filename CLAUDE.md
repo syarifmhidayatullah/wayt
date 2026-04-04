@@ -10,6 +10,7 @@ Aplikasi antrian berbasis QR code. Monolith, solo developer, backend Go + fronte
 - **Database**: MySQL
 - **Frontend**: HTML + Alpine.js + Tailwind CSS (via CDN, no build step)
 - **QR Generator**: `skip2/go-qrcode`
+- **Auth**: JWT (`golang-jwt/jwt/v5`) + bcrypt
 
 ## Struktur Folder
 
@@ -24,7 +25,7 @@ wayt/
 │   └── model/                   # Struct + TableName()
 ├── migrations/                  # DDL SQL files (jalankan manual ke MySQL)
 ├── pkg/
-│   ├── middleware/auth.go       # InternalAuth: cek header X-Internal-Key
+│   ├── middleware/auth.go       # JWTAuth + SuperAdminOnly middleware
 │   └── response/response.go    # Helper JSON response standar
 ├── web/templates/
 │   ├── admin.html               # Internal tools dashboard
@@ -52,8 +53,11 @@ DB_USER=
 DB_PASSWORD=
 DB_NAME=wayt
 
-INTERNAL_API_KEY=        # Key untuk semua endpoint /internal/*
-PUBLIC_BASE_URL=         # Base URL yang bisa diakses HP (e.g. http://192.168.0.167:8080)
+JWT_SECRET=           # Secret untuk sign JWT, wajib diganti di production
+ADMIN_USERNAME=admin  # Username superadmin pertama (seed otomatis saat start)
+ADMIN_PASSWORD=       # Password superadmin pertama
+
+PUBLIC_BASE_URL=      # Base URL yang bisa diakses HP (e.g. http://192.168.0.167:8080)
 
 QR_STORAGE_PATH=./storage/qr
 QR_BASE_URL=http://localhost:8080/storage/qr
@@ -63,32 +67,46 @@ QR_EXPIRED_HOURS=24
 ## Menjalankan
 
 ```bash
-# 1. Setup database
-mysql -u root -p < migrations/001_create_branches.sql
-mysql -u root -p < migrations/002_create_qr_codes.sql
-mysql -u root -p < migrations/003_create_queues.sql
+# 1. Setup database (jalankan berurutan)
+mysql -u root -p wayt < migrations/001_create_branches.sql
+mysql -u root -p wayt < migrations/002_create_qr_codes.sql
+mysql -u root -p wayt < migrations/003_create_queues.sql
+mysql -u root -p wayt < migrations/004_create_admin_users.sql
+mysql -u root -p wayt < migrations/005_add_role_to_admin_users.sql
 
 # 2. Copy dan isi env
 cp .env.example .env
 
-# 3. Run
-go run ./cmd/api/main.go
+# 3. Run (gunakan CGO_ENABLED=0 di macOS Sequoia/Tahoe)
+CGO_ENABLED=0 go run ./cmd/api/main.go
 ```
+
+Saat server pertama kali start, jika tabel `admin_users` kosong dan `ADMIN_PASSWORD` diisi, server otomatis seed user superadmin.
 
 ## API Endpoints
 
-### Internal (header wajib: `X-Internal-Key: <value>`)
+### Auth (public)
 
 | Method | Endpoint | Fungsi |
 |--------|----------|--------|
-| POST | `/internal/branches` | Buat branch |
-| GET | `/internal/branches` | List branch |
-| PUT | `/internal/branches/:id` | Update branch |
-| DELETE | `/internal/branches/:id` | Hapus branch |
-| POST | `/internal/branches/:id/qr` | Generate QR code |
-| POST | `/internal/branches/:id/next` | Panggil antrian berikutnya |
-| GET | `/internal/branches/:id/queue` | List antrian aktif |
-| POST | `/internal/branches/:id/reset` | Reset antrian & nomor |
+| POST | `/auth/login` | Login, return JWT token |
+
+### Internal (header wajib: `Authorization: Bearer <token>`)
+
+| Method | Endpoint | Role | Fungsi |
+|--------|----------|------|--------|
+| GET | `/internal/users` | superadmin | List admin users |
+| POST | `/internal/users` | superadmin | Buat admin user baru |
+| PUT | `/internal/users/:id` | superadmin | Update user |
+| DELETE | `/internal/users/:id` | superadmin | Hapus user |
+| POST | `/internal/branches` | all | Buat branch |
+| GET | `/internal/branches` | all | List branch |
+| PUT | `/internal/branches/:id` | all | Update branch |
+| DELETE | `/internal/branches/:id` | all | Hapus branch |
+| POST | `/internal/branches/:id/qr` | all | Generate QR code |
+| POST | `/internal/branches/:id/next` | all | Panggil antrian berikutnya |
+| GET | `/internal/branches/:id/queue` | all | List antrian aktif |
+| POST | `/internal/branches/:id/reset` | all | Reset antrian & nomor |
 
 ### Public
 
@@ -117,7 +135,7 @@ Setiap orang mendapat URL `/queue/{id}` yang berbeda untuk memantau posisinya.
 ## Model Data
 
 ### Branch
-Cabang/loket antrian. Punya `prefix` (e.g. "A"), `current_number` (sedang dilayani), `last_number` (total yang sudah daftar).
+Cabang/loket antrian. Punya `prefix` (e.g. "A"), `current_number` (sedang dilayani), `last_number` (total yang sudah daftar). Soft delete via kolom `deleted_at`.
 
 ### QRCode
 Satu QR per generate. Punya `token` (UUID), `expired_at`, `is_active`. Bisa di-reset via endpoint reset branch.
@@ -125,10 +143,27 @@ Satu QR per generate. Punya `token` (UUID), `expired_at`, `is_active`. Bisa di-r
 ### Queue
 Satu entri per pendaftar. Status: `waiting → called → done` atau `expired` (saat reset).
 
+### AdminUser
+User untuk login ke admin panel. Role: `superadmin` atau `admin`.
+- `superadmin` — akses semua fitur termasuk kelola user
+- `admin` — hanya manage branches & antrian
+
+## Auth Flow
+
+```
+POST /auth/login  →  return JWT (expire 8 jam)
+JWT claims: { sub, username, role, exp }
+
+Semua /internal/* wajib header: Authorization: Bearer <token>
+/internal/users/* hanya bisa diakses role superadmin
+```
+
+JWT di-parse di frontend (Alpine.js) untuk menampilkan/menyembunyikan tab Kelola User.
+
 ## Frontend
 
-- **`/admin`** — Login pakai API key (disimpan di `localStorage`). Fitur: CRUD branch, generate QR (tampil preview + download), panggil next, reset, lihat list antrian.
-- **`/queue/:id`** — Halaman mobile. Tampil nomor antrian, posisi, sedang dilayani. Polling `/api/queue/id/:id/status` tiap 5 detik via Alpine.js.
+- **`/admin`** — Login pakai username/password. JWT disimpan di `localStorage`. Tab Antrian (semua role) dan tab Kelola User (superadmin only). Auto-logout saat JWT expired (server return 401).
+- **`/queue/:id`** — Halaman mobile. Tampil nomor antrian, posisi, sedang dilayani. Polling `/api/queue/id/:id/status` tiap 5 detik via Alpine.js. Polling berhenti saat status `done`/`expired`.
 
 ## Konvensi
 
@@ -136,3 +171,4 @@ Satu entri per pendaftar. Status: `waiting → called → done` atau `expired` (
 - Soft delete pada `branches` via kolom `deleted_at`
 - Tidak pakai GORM AutoMigrate — DDL dikelola manual di folder `migrations/`
 - Template HTML di-load via `r.LoadHTMLGlob("web/templates/*")` — path relatif dari direktori kerja saat `go run`
+- Tidak bisa hapus akun sendiri (dicek di service layer)
