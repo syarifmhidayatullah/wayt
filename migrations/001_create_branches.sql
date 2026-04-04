@@ -1,0 +1,15 @@
+-- +migrate Up
+CREATE TABLE IF NOT EXISTS branches (
+    id          BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    name        VARCHAR(100)    NOT NULL,
+    prefix      VARCHAR(10)     NOT NULL,
+    is_active   TINYINT(1)      NOT NULL DEFAULT 1,
+    current_number INT UNSIGNED NOT NULL DEFAULT 0,
+    last_number    INT UNSIGNED NOT NULL DEFAULT 0,
+    created_at  DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at  DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    deleted_at  DATETIME        NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- +migrate Down
+DROP TABLE IF EXISTS branches;

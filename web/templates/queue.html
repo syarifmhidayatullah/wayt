@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Antrian Anda</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+</head>
+<body class="bg-gray-50 min-h-screen flex items-center justify-center p-4">
+
+  {{ if .error }}
+  <!-- Error State -->
+  <div class="bg-white rounded-2xl shadow-lg p-8 w-full max-w-sm text-center">
+    <div class="text-5xl mb-4">⚠️</div>
+    <h1 class="text-xl font-bold text-gray-800 mb-2">Gagal Mendaftar</h1>
+    <p class="text-red-500 text-sm">{{ .error }}</p>
+    <p class="text-gray-400 text-xs mt-4">Silakan minta QR code baru kepada petugas.</p>
+  </div>
+  {{ else }}
+  <!-- Queue State — Alpine.js manages live status polling -->
+  <div
+    x-data="queueStatus({{ .queue_id }}, '{{ .queue_number }}', '{{ .branch_name }}', '{{ .status }}', '{{ .current }}', {{ .people_ahead }})"
+    x-init="startPolling()"
+    class="bg-white rounded-2xl shadow-lg p-8 w-full max-w-sm text-center"
+  >
+    <p class="text-sm text-gray-500 uppercase tracking-widest mb-1" x-text="branchName"></p>
+
+    <p class="text-gray-400 text-sm mb-1">Nomor Antrian Anda</p>
+    <h1 class="text-6xl font-extrabold text-blue-600 mb-6" x-text="queueNumber"></h1>
+
+    <!-- Status badge -->
+    <div class="mb-6">
+      <span
+        class="px-4 py-1 rounded-full text-sm font-semibold"
+        :class="{
+          'bg-yellow-100 text-yellow-700': status === 'waiting',
+          'bg-green-100 text-green-700':  status === 'called',
+          'bg-gray-100 text-gray-500':    status === 'done' || status === 'expired'
+        }"
+        x-text="statusLabel()"
+      ></span>
+    </div>
+
+    <!-- Info cards -->
+    <div class="grid grid-cols-2 gap-3 mb-6">
+      <div class="bg-gray-50 rounded-xl p-3">
+        <p class="text-xs text-gray-400 mb-1">Sedang Dilayani</p>
+        <p class="text-xl font-bold text-gray-700" x-text="currentServing"></p>
+      </div>
+      <div class="bg-gray-50 rounded-xl p-3">
+        <p class="text-xs text-gray-400 mb-1">Antrian di Depan</p>
+        <p class="text-xl font-bold text-gray-700" x-text="peopleAhead"></p>
+      </div>
+    </div>
+
+    <!-- Called notification -->
+    <div x-show="status === 'called'" class="bg-green-50 border border-green-200 rounded-xl p-4 mb-4">
+      <p class="text-green-700 font-semibold text-sm">Giliran Anda! Segera menuju loket.</p>
+    </div>
+
+    <!-- Done/Expired state -->
+    <div x-show="status === 'done' || status === 'expired'" class="bg-gray-50 border border-gray-200 rounded-xl p-4 mb-4">
+      <p class="text-gray-500 text-sm">Sesi antrian Anda telah selesai.</p>
+    </div>
+
+    <p class="text-xs text-gray-300 mt-2" x-show="status === 'waiting' || status === 'called'">
+      Halaman ini diperbarui otomatis setiap 5 detik
+    </p>
+  </div>
+  {{ end }}
+
+  <script>
+    function queueStatus(queueId, queueNumber, branchName, initialStatus, initialCurrent, initialAhead) {
+      return {
+        queueId,
+        queueNumber,
+        branchName,
+        status: initialStatus || 'waiting',
+        currentServing: initialCurrent || '-',
+        peopleAhead: initialAhead || 0,
+        pollInterval: null,
+
+        statusLabel() {
+          const labels = {
+            waiting: 'Menunggu',
+            called:  'Dipanggil',
+            done:    'Selesai',
+            expired: 'Kedaluwarsa',
+          }
+          return labels[this.status] ?? this.status
+        },
+
+        async fetchStatus() {
+          try {
+            const res = await fetch(`/api/queue/id/${this.queueId}/status`)
+            if (!res.ok) return
+            const json = await res.json()
+            const d = json.data
+            this.status         = d.status
+            this.currentServing = d.current_serving
+            this.peopleAhead    = d.people_ahead
+            if (this.status === 'done' || this.status === 'expired') {
+              clearInterval(this.pollInterval)
+            }
+          } catch (e) {
+            // network error — will retry next interval
+          }
+        },
+
+        startPolling() {
+          if (this.status !== 'done' && this.status !== 'expired') {
+            this.pollInterval = setInterval(() => this.fetchStatus(), 5000)
+          }
+        },
+      }
+    }
+  </script>
+</body>
+</html>

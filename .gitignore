@@ -1,0 +1,16 @@
+# Environment
+.env
+
+# Binary
+wayt
+/bin/
+
+# Go build cache
+*.test
+*.out
+
+# QR storage (generated files)
+storage/
+
+# OS
+.DS_Store

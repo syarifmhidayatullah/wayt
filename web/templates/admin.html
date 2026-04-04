@@ -1,0 +1,401 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Wayt — Admin</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+</head>
+<body class="bg-gray-100 min-h-screen" x-data="app()" x-init="init()">
+
+  <!-- Login screen -->
+  <div x-show="!authenticated" class="min-h-screen flex items-center justify-center p-4">
+    <div class="bg-white rounded-2xl shadow-lg p-8 w-full max-w-sm">
+      <h1 class="text-2xl font-bold text-gray-800 mb-1">Wayt Admin</h1>
+      <p class="text-gray-400 text-sm mb-6">Masukkan API key untuk melanjutkan</p>
+      <input
+        type="password"
+        x-model="apiKeyInput"
+        placeholder="X-Internal-Key"
+        class="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400 mb-3"
+        @keydown.enter="login()"
+      />
+      <p x-show="loginError" class="text-red-500 text-xs mb-3" x-text="loginError"></p>
+      <button
+        @click="login()"
+        class="w-full bg-blue-600 text-white rounded-xl py-3 text-sm font-semibold hover:bg-blue-700 transition"
+      >Masuk</button>
+    </div>
+  </div>
+
+  <!-- Main Dashboard -->
+  <div x-show="authenticated" class="max-w-4xl mx-auto px-4 py-8">
+
+    <!-- Header -->
+    <div class="flex items-center justify-between mb-8">
+      <div>
+        <h1 class="text-2xl font-bold text-gray-800">Wayt Admin</h1>
+        <p class="text-gray-400 text-sm">Internal Queue Management</p>
+      </div>
+      <div class="flex gap-2">
+        <button
+          @click="openCreateBranch = true"
+          class="bg-blue-600 text-white px-4 py-2 rounded-xl text-sm font-semibold hover:bg-blue-700 transition"
+        >+ Branch</button>
+        <button
+          @click="logout()"
+          class="bg-gray-100 text-gray-600 px-4 py-2 rounded-xl text-sm hover:bg-gray-200 transition"
+        >Keluar</button>
+      </div>
+    </div>
+
+    <!-- Error banner -->
+    <div x-show="globalError" class="bg-red-50 border border-red-200 rounded-xl p-4 mb-4 text-red-600 text-sm" x-text="globalError"></div>
+
+    <!-- Branch list -->
+    <div x-show="branches.length === 0" class="bg-white rounded-2xl shadow p-8 text-center text-gray-400 text-sm">
+      Belum ada branch. Klik <strong>+ Branch</strong> untuk membuat.
+    </div>
+
+    <template x-for="branch in branches" :key="branch.id">
+      <div class="bg-white rounded-2xl shadow mb-4 overflow-hidden">
+
+        <!-- Branch header -->
+        <div class="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+          <div class="flex items-center gap-3">
+            <span
+              class="w-3 h-3 rounded-full"
+              :class="branch.is_active ? 'bg-green-400' : 'bg-gray-300'"
+            ></span>
+            <div>
+              <span class="font-semibold text-gray-800" x-text="branch.name"></span>
+              <span class="ml-2 text-xs bg-gray-100 text-gray-500 px-2 py-0.5 rounded-full" x-text="'Prefix: ' + branch.prefix"></span>
+            </div>
+          </div>
+          <div class="flex gap-2">
+            <button
+              @click="editBranch(branch)"
+              class="text-xs text-blue-500 hover:underline"
+            >Edit</button>
+            <button
+              @click="confirmDelete(branch)"
+              class="text-xs text-red-400 hover:underline"
+            >Hapus</button>
+          </div>
+        </div>
+
+        <!-- Branch stats -->
+        <div class="grid grid-cols-3 divide-x divide-gray-100 border-b border-gray-100">
+          <div class="px-6 py-3 text-center">
+            <p class="text-xs text-gray-400">Sedang Dilayani</p>
+            <p class="text-xl font-bold text-gray-700" x-text="branch.prefix + '-' + String(branch.current_number).padStart(3,'0')"></p>
+          </div>
+          <div class="px-6 py-3 text-center">
+            <p class="text-xs text-gray-400">Total Antrian</p>
+            <p class="text-xl font-bold text-gray-700" x-text="branch.last_number"></p>
+          </div>
+          <div class="px-6 py-3 text-center">
+            <p class="text-xs text-gray-400">Menunggu</p>
+            <p class="text-xl font-bold text-blue-600" x-text="(branchQueues[branch.id] || []).filter(q => q.status === 'waiting').length"></p>
+          </div>
+        </div>
+
+        <!-- Actions -->
+        <div class="flex flex-wrap gap-2 px-6 py-4 border-b border-gray-100">
+          <button
+            @click="generateQR(branch)"
+            class="bg-indigo-50 text-indigo-600 px-4 py-2 rounded-xl text-sm font-medium hover:bg-indigo-100 transition"
+          >Generate QR</button>
+          <button
+            @click="callNext(branch)"
+            :disabled="(branchQueues[branch.id] || []).filter(q => q.status === 'waiting').length === 0"
+            class="bg-green-50 text-green-600 px-4 py-2 rounded-xl text-sm font-medium hover:bg-green-100 transition disabled:opacity-40 disabled:cursor-not-allowed"
+          >Panggil Berikutnya</button>
+          <button
+            @click="confirmReset(branch)"
+            class="bg-red-50 text-red-500 px-4 py-2 rounded-xl text-sm font-medium hover:bg-red-100 transition"
+          >Reset Antrian</button>
+          <button
+            @click="refreshQueue(branch.id)"
+            class="bg-gray-50 text-gray-500 px-4 py-2 rounded-xl text-sm font-medium hover:bg-gray-100 transition"
+          >Refresh</button>
+        </div>
+
+        <!-- QR result -->
+        <div x-show="qrResults[branch.id]" class="px-6 py-4 border-b border-gray-100 bg-indigo-50">
+          <div class="flex items-center gap-4">
+            <img :src="(qrResults[branch.id] || {}).qr_image_url" class="w-24 h-24 rounded-lg border border-indigo-200" />
+            <div>
+              <p class="text-xs text-indigo-600 font-semibold mb-1">QR berhasil dibuat</p>
+              <p class="text-xs text-gray-500 break-all" x-text="(qrResults[branch.id] || {}).token"></p>
+              <p class="text-xs text-gray-400 mt-1">Expired: <span x-text="formatDate((qrResults[branch.id] || {}).expired_at)"></span></p>
+              <a :href="(qrResults[branch.id] || {}).qr_image_url" download class="text-xs text-indigo-500 hover:underline mt-1 inline-block">Download QR</a>
+            </div>
+          </div>
+        </div>
+
+        <!-- Called notification -->
+        <div x-show="calledQueue[branch.id]" class="px-6 py-3 bg-green-50 border-b border-gray-100">
+          <p class="text-sm text-green-700 font-semibold">
+            Memanggil: <span x-text="(calledQueue[branch.id] || {}).queue_number"></span>
+          </p>
+        </div>
+
+        <!-- Queue list -->
+        <div class="px-6 py-4">
+          <p class="text-xs text-gray-400 font-semibold uppercase tracking-widest mb-3">Antrian Aktif</p>
+          <div x-show="(branchQueues[branch.id] || []).length === 0" class="text-gray-300 text-sm">Belum ada antrian</div>
+          <div class="space-y-2">
+            <template x-for="q in (branchQueues[branch.id] || [])" :key="q.id">
+              <div class="flex items-center justify-between bg-gray-50 rounded-xl px-4 py-2">
+                <span class="font-mono font-semibold text-gray-700 text-sm" x-text="q.queue_number"></span>
+                <span
+                  class="text-xs px-2 py-0.5 rounded-full"
+                  :class="{
+                    'bg-yellow-100 text-yellow-600': q.status === 'waiting',
+                    'bg-green-100 text-green-600':   q.status === 'called',
+                    'bg-gray-100 text-gray-400':     q.status === 'done' || q.status === 'expired'
+                  }"
+                  x-text="q.status"
+                ></span>
+              </div>
+            </template>
+          </div>
+        </div>
+
+      </div>
+    </template>
+  </div>
+
+  <!-- Modal: Create / Edit Branch -->
+  <div x-show="openCreateBranch || editingBranch" class="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
+    <div class="bg-white rounded-2xl shadow-xl p-6 w-full max-w-sm" @click.outside="closeModal()">
+      <h2 class="font-bold text-gray-800 mb-4" x-text="editingBranch ? 'Edit Branch' : 'Buat Branch Baru'"></h2>
+      <input
+        x-model="branchForm.name"
+        placeholder="Nama branch (e.g. Kasir 1)"
+        class="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400 mb-3"
+      />
+      <input
+        x-model="branchForm.prefix"
+        placeholder="Prefix (e.g. A)"
+        maxlength="5"
+        class="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400 mb-3"
+      />
+      <template x-if="editingBranch">
+        <label class="flex items-center gap-2 text-sm text-gray-600 mb-3">
+          <input type="checkbox" x-model="branchForm.is_active" class="rounded" />
+          Aktif
+        </label>
+      </template>
+      <p x-show="modalError" class="text-red-500 text-xs mb-3" x-text="modalError"></p>
+      <div class="flex gap-2">
+        <button @click="closeModal()" class="flex-1 border border-gray-200 rounded-xl py-2.5 text-sm hover:bg-gray-50">Batal</button>
+        <button @click="saveBranch()" class="flex-1 bg-blue-600 text-white rounded-xl py-2.5 text-sm font-semibold hover:bg-blue-700">Simpan</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal: Confirm Reset -->
+  <div x-show="resetTarget" class="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
+    <div class="bg-white rounded-2xl shadow-xl p-6 w-full max-w-sm">
+      <h2 class="font-bold text-gray-800 mb-2">Reset Antrian?</h2>
+      <p class="text-sm text-gray-500 mb-4">Semua antrian aktif di <strong x-text="(resetTarget || {}).name"></strong> akan kedaluwarsa dan nomor direset ke 0.</p>
+      <div class="flex gap-2">
+        <button @click="resetTarget = null" class="flex-1 border border-gray-200 rounded-xl py-2.5 text-sm hover:bg-gray-50">Batal</button>
+        <button @click="doReset()" class="flex-1 bg-red-500 text-white rounded-xl py-2.5 text-sm font-semibold hover:bg-red-600">Reset</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal: Confirm Delete -->
+  <div x-show="deleteTarget" class="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
+    <div class="bg-white rounded-2xl shadow-xl p-6 w-full max-w-sm">
+      <h2 class="font-bold text-gray-800 mb-2">Hapus Branch?</h2>
+      <p class="text-sm text-gray-500 mb-4">Branch <strong x-text="(deleteTarget || {}).name"></strong> akan dihapus permanen.</p>
+      <div class="flex gap-2">
+        <button @click="deleteTarget = null" class="flex-1 border border-gray-200 rounded-xl py-2.5 text-sm hover:bg-gray-50">Batal</button>
+        <button @click="doDelete()" class="flex-1 bg-red-500 text-white rounded-xl py-2.5 text-sm font-semibold hover:bg-red-600">Hapus</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    function app() {
+      return {
+        authenticated: false,
+        apiKeyInput: '',
+        apiKey: '',
+        loginError: '',
+        globalError: '',
+
+        branches: [],
+        branchQueues: {},
+        qrResults: {},
+        calledQueue: {},
+
+        openCreateBranch: false,
+        editingBranch: null,
+        branchForm: { name: '', prefix: '', is_active: true },
+        modalError: '',
+
+        resetTarget: null,
+        deleteTarget: null,
+
+        init() {
+          const saved = localStorage.getItem('wayt_api_key')
+          if (saved) {
+            this.apiKey = saved
+            this.authenticated = true
+            this.loadBranches()
+          }
+        },
+
+        async login() {
+          this.loginError = ''
+          const res = await fetch('/internal/branches', {
+            headers: { 'X-Internal-Key': this.apiKeyInput }
+          })
+          if (res.ok) {
+            this.apiKey = this.apiKeyInput
+            localStorage.setItem('wayt_api_key', this.apiKey)
+            this.authenticated = true
+            const json = await res.json()
+            this.branches = json.data || []
+            this.branches.forEach(b => this.loadQueue(b.id))
+          } else {
+            this.loginError = 'API key salah atau tidak valid.'
+          }
+        },
+
+        logout() {
+          localStorage.removeItem('wayt_api_key')
+          this.authenticated = false
+          this.apiKey = ''
+          this.apiKeyInput = ''
+          this.branches = []
+        },
+
+        headers() {
+          return { 'Content-Type': 'application/json', 'X-Internal-Key': this.apiKey }
+        },
+
+        async loadBranches() {
+          const res = await fetch('/internal/branches', { headers: this.headers() })
+          const json = await res.json()
+          this.branches = json.data || []
+          this.branches.forEach(b => this.loadQueue(b.id))
+        },
+
+        async loadQueue(branchId) {
+          const res = await fetch(`/internal/branches/${branchId}/queue`, { headers: this.headers() })
+          const json = await res.json()
+          this.branchQueues = { ...this.branchQueues, [branchId]: json.data || [] }
+        },
+
+        async refreshQueue(branchId) {
+          await this.loadBranches()
+        },
+
+        async generateQR(branch) {
+          this.globalError = ''
+          const res = await fetch(`/internal/branches/${branch.id}/qr`, {
+            method: 'POST', headers: this.headers()
+          })
+          const json = await res.json()
+          if (res.ok) {
+            this.qrResults = { ...this.qrResults, [branch.id]: json.data }
+          } else {
+            this.globalError = json.message || 'Gagal generate QR'
+          }
+        },
+
+        async callNext(branch) {
+          this.globalError = ''
+          const res = await fetch(`/internal/branches/${branch.id}/next`, {
+            method: 'POST', headers: this.headers()
+          })
+          const json = await res.json()
+          if (res.ok) {
+            this.calledQueue = { ...this.calledQueue, [branch.id]: json.data }
+            await this.loadBranches()
+            setTimeout(() => {
+              const updated = { ...this.calledQueue }
+              delete updated[branch.id]
+              this.calledQueue = updated
+            }, 5000)
+          } else {
+            this.globalError = json.message || 'Tidak ada antrian'
+          }
+        },
+
+        confirmReset(branch) { this.resetTarget = branch },
+        async doReset() {
+          const res = await fetch(`/internal/branches/${this.resetTarget.id}/reset`, {
+            method: 'POST', headers: this.headers()
+          })
+          if (res.ok) {
+            await this.loadBranches()
+            const updated = { ...this.qrResults }
+            delete updated[this.resetTarget.id]
+            this.qrResults = updated
+          }
+          this.resetTarget = null
+        },
+
+        confirmDelete(branch) { this.deleteTarget = branch },
+        async doDelete() {
+          await fetch(`/internal/branches/${this.deleteTarget.id}`, {
+            method: 'DELETE', headers: this.headers()
+          })
+          await this.loadBranches()
+          this.deleteTarget = null
+        },
+
+        editBranch(branch) {
+          this.editingBranch = branch
+          this.branchForm = { name: branch.name, prefix: branch.prefix, is_active: branch.is_active }
+        },
+
+        closeModal() {
+          this.openCreateBranch = false
+          this.editingBranch = null
+          this.branchForm = { name: '', prefix: '', is_active: true }
+          this.modalError = ''
+        },
+
+        async saveBranch() {
+          this.modalError = ''
+          if (!this.branchForm.name || !this.branchForm.prefix) {
+            this.modalError = 'Nama dan prefix wajib diisi.'
+            return
+          }
+          let res
+          if (this.editingBranch) {
+            res = await fetch(`/internal/branches/${this.editingBranch.id}`, {
+              method: 'PUT', headers: this.headers(), body: JSON.stringify(this.branchForm)
+            })
+          } else {
+            res = await fetch('/internal/branches', {
+              method: 'POST', headers: this.headers(), body: JSON.stringify(this.branchForm)
+            })
+          }
+          if (res.ok) {
+            await this.loadBranches()
+            this.closeModal()
+          } else {
+            const json = await res.json()
+            this.modalError = json.message || 'Gagal menyimpan'
+          }
+        },
+
+        formatDate(str) {
+          if (!str) return ''
+          return new Date(str).toLocaleString('id-ID')
+        },
+      }
+    }
+  </script>
+</body>
+</html>
