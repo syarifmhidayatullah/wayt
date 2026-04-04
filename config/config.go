@@ -9,11 +9,11 @@ import (
 )
 
 type Config struct {
-	AppPort  string
-	AppEnv   string
-	DB       DBConfig
-	Internal InternalConfig
-	QR       QRConfig
+	AppPort string
+	AppEnv  string
+	DB      DBConfig
+	Auth    AuthConfig
+	QR      QRConfig
 }
 
 type DBConfig struct {
@@ -24,8 +24,10 @@ type DBConfig struct {
 	Name     string
 }
 
-type InternalConfig struct {
-	APIKey string
+type AuthConfig struct {
+	JWTSecret     string
+	AdminUsername string
+	AdminPassword string
 }
 
 type QRConfig struct {
@@ -53,8 +55,10 @@ func Load() (*Config, error) {
 			Password: getEnv("DB_PASSWORD", ""),
 			Name:     getEnv("DB_NAME", "wayt"),
 		},
-		Internal: InternalConfig{
-			APIKey: getEnv("INTERNAL_API_KEY", ""),
+		Auth: AuthConfig{
+			JWTSecret:     getEnv("JWT_SECRET", "change-this-secret"),
+			AdminUsername: getEnv("ADMIN_USERNAME", "admin"),
+			AdminPassword: getEnv("ADMIN_PASSWORD", ""),
 		},
 		QR: QRConfig{
 			StoragePath:   getEnv("QR_STORAGE_PATH", "./storage/qr"),

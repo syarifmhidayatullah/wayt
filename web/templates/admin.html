@@ -13,19 +13,27 @@
   <div x-show="!authenticated" class="min-h-screen flex items-center justify-center p-4">
     <div class="bg-white rounded-2xl shadow-lg p-8 w-full max-w-sm">
       <h1 class="text-2xl font-bold text-gray-800 mb-1">Wayt Admin</h1>
-      <p class="text-gray-400 text-sm mb-6">Masukkan API key untuk melanjutkan</p>
+      <p class="text-gray-400 text-sm mb-6">Login untuk melanjutkan</p>
+      <input
+        type="text"
+        x-model="loginForm.username"
+        placeholder="Username"
+        class="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400 mb-3"
+        @keydown.enter="login()"
+      />
       <input
         type="password"
-        x-model="apiKeyInput"
-        placeholder="X-Internal-Key"
+        x-model="loginForm.password"
+        placeholder="Password"
         class="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400 mb-3"
         @keydown.enter="login()"
       />
       <p x-show="loginError" class="text-red-500 text-xs mb-3" x-text="loginError"></p>
       <button
         @click="login()"
-        class="w-full bg-blue-600 text-white rounded-xl py-3 text-sm font-semibold hover:bg-blue-700 transition"
-      >Masuk</button>
+        :disabled="loginLoading"
+        class="w-full bg-blue-600 text-white rounded-xl py-3 text-sm font-semibold hover:bg-blue-700 transition disabled:opacity-50"
+      ><span x-text="loginLoading ? 'Memuat...' : 'Masuk'"></span></button>
     </div>
   </div>
 
@@ -33,25 +41,46 @@
   <div x-show="authenticated" class="max-w-4xl mx-auto px-4 py-8">
 
     <!-- Header -->
-    <div class="flex items-center justify-between mb-8">
+    <div class="flex items-center justify-between mb-6">
       <div>
         <h1 class="text-2xl font-bold text-gray-800">Wayt Admin</h1>
-        <p class="text-gray-400 text-sm">Internal Queue Management</p>
+        <p class="text-gray-400 text-sm">Halo, <span x-text="currentUsername"></span>
+          <span x-show="currentRole === 'superadmin'" class="ml-1 text-xs bg-indigo-100 text-indigo-600 px-2 py-0.5 rounded-full">superadmin</span>
+          <span x-show="currentRole === 'admin'" class="ml-1 text-xs bg-gray-100 text-gray-500 px-2 py-0.5 rounded-full">admin</span>
+        </p>
       </div>
-      <div class="flex gap-2">
-        <button
-          @click="openCreateBranch = true"
-          class="bg-blue-600 text-white px-4 py-2 rounded-xl text-sm font-semibold hover:bg-blue-700 transition"
-        >+ Branch</button>
-        <button
-          @click="logout()"
-          class="bg-gray-100 text-gray-600 px-4 py-2 rounded-xl text-sm hover:bg-gray-200 transition"
-        >Keluar</button>
-      </div>
+      <button
+        @click="logout()"
+        class="bg-gray-100 text-gray-600 px-4 py-2 rounded-xl text-sm hover:bg-gray-200 transition"
+      >Keluar</button>
+    </div>
+
+    <!-- Tabs -->
+    <div class="flex gap-1 mb-6 bg-gray-200 rounded-xl p-1 w-fit">
+      <button
+        @click="activeTab = 'branches'"
+        :class="activeTab === 'branches' ? 'bg-white shadow text-gray-800' : 'text-gray-500 hover:text-gray-700'"
+        class="px-4 py-2 rounded-lg text-sm font-medium transition"
+      >Antrian</button>
+      <button
+        x-show="currentRole === 'superadmin'"
+        @click="activeTab = 'users'; loadUsers()"
+        :class="activeTab === 'users' ? 'bg-white shadow text-gray-800' : 'text-gray-500 hover:text-gray-700'"
+        class="px-4 py-2 rounded-lg text-sm font-medium transition"
+      >Kelola User</button>
     </div>
 
     <!-- Error banner -->
     <div x-show="globalError" class="bg-red-50 border border-red-200 rounded-xl p-4 mb-4 text-red-600 text-sm" x-text="globalError"></div>
+
+    <!-- ===== TAB: BRANCHES ===== -->
+    <div x-show="activeTab === 'branches'">
+    <div class="flex justify-end mb-4">
+      <button
+        @click="openCreateBranch = true"
+        class="bg-blue-600 text-white px-4 py-2 rounded-xl text-sm font-semibold hover:bg-blue-700 transition"
+      >+ Branch</button>
+    </div>
 
     <!-- Branch list -->
     <div x-show="branches.length === 0" class="bg-white rounded-2xl shadow p-8 text-center text-gray-400 text-sm">
@@ -168,6 +197,57 @@
     </template>
   </div>
 
+    </div> <!-- end tab branches -->
+
+    <!-- ===== TAB: USERS ===== -->
+    <div x-show="activeTab === 'users'">
+      <div class="flex justify-end mb-4">
+        <button
+          @click="openCreateUser = true"
+          class="bg-blue-600 text-white px-4 py-2 rounded-xl text-sm font-semibold hover:bg-blue-700 transition"
+        >+ User</button>
+      </div>
+
+      <div class="bg-white rounded-2xl shadow overflow-hidden">
+        <div x-show="adminUsers.length === 0" class="p-8 text-center text-gray-400 text-sm">Belum ada user.</div>
+        <table x-show="adminUsers.length > 0" class="w-full text-sm">
+          <thead class="bg-gray-50 text-gray-400 text-xs uppercase tracking-widest">
+            <tr>
+              <th class="px-6 py-3 text-left">Username</th>
+              <th class="px-6 py-3 text-left">Role</th>
+              <th class="px-6 py-3 text-left">Dibuat</th>
+              <th class="px-6 py-3"></th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-gray-100">
+            <template x-for="u in adminUsers" :key="u.id">
+              <tr>
+                <td class="px-6 py-4 font-medium text-gray-800" x-text="u.username"></td>
+                <td class="px-6 py-4">
+                  <span
+                    class="px-2 py-0.5 rounded-full text-xs font-semibold"
+                    :class="u.role === 'superadmin' ? 'bg-indigo-100 text-indigo-600' : 'bg-gray-100 text-gray-500'"
+                    x-text="u.role"
+                  ></span>
+                </td>
+                <td class="px-6 py-4 text-gray-400" x-text="formatDate(u.created_at)"></td>
+                <td class="px-6 py-4 text-right">
+                  <div class="flex justify-end gap-3">
+                    <button @click="editUser(u)" class="text-xs text-blue-500 hover:underline">Edit</button>
+                    <button
+                      @click="confirmDeleteUser(u)"
+                      x-show="u.id !== currentUserID"
+                      class="text-xs text-red-400 hover:underline"
+                    >Hapus</button>
+                  </div>
+                </td>
+              </tr>
+            </template>
+          </tbody>
+        </table>
+      </div>
+    </div> <!-- end tab users -->
+
   <!-- Modal: Create / Edit Branch -->
   <div x-show="openCreateBranch || editingBranch" class="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
     <div class="bg-white rounded-2xl shadow-xl p-6 w-full max-w-sm" @click.outside="closeModal()">
@@ -221,14 +301,62 @@
     </div>
   </div>
 
+  <!-- Modal: Create / Edit User -->
+  <div x-show="openCreateUser || editingUser" class="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
+    <div class="bg-white rounded-2xl shadow-xl p-6 w-full max-w-sm" @click.outside="closeUserModal()">
+      <h2 class="font-bold text-gray-800 mb-4" x-text="editingUser ? 'Edit User' : 'Buat User Baru'"></h2>
+      <input
+        x-model="userForm.username"
+        placeholder="Username"
+        class="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400 mb-3"
+      />
+      <input
+        x-model="userForm.password"
+        type="password"
+        :placeholder="editingUser ? 'Password baru (kosongkan jika tidak diubah)' : 'Password'"
+        class="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400 mb-3"
+      />
+      <select
+        x-model="userForm.role"
+        class="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400 mb-3"
+      >
+        <option value="admin">admin</option>
+        <option value="superadmin">superadmin</option>
+      </select>
+      <p x-show="userModalError" class="text-red-500 text-xs mb-3" x-text="userModalError"></p>
+      <div class="flex gap-2">
+        <button @click="closeUserModal()" class="flex-1 border border-gray-200 rounded-xl py-2.5 text-sm hover:bg-gray-50">Batal</button>
+        <button @click="saveUser()" class="flex-1 bg-blue-600 text-white rounded-xl py-2.5 text-sm font-semibold hover:bg-blue-700">Simpan</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal: Confirm Delete User -->
+  <div x-show="deleteUserTarget" class="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
+    <div class="bg-white rounded-2xl shadow-xl p-6 w-full max-w-sm">
+      <h2 class="font-bold text-gray-800 mb-2">Hapus User?</h2>
+      <p class="text-sm text-gray-500 mb-4">User <strong x-text="(deleteUserTarget || {}).username"></strong> akan dihapus permanen.</p>
+      <div class="flex gap-2">
+        <button @click="deleteUserTarget = null" class="flex-1 border border-gray-200 rounded-xl py-2.5 text-sm hover:bg-gray-50">Batal</button>
+        <button @click="doDeleteUser()" class="flex-1 bg-red-500 text-white rounded-xl py-2.5 text-sm font-semibold hover:bg-red-600">Hapus</button>
+      </div>
+    </div>
+  </div>
+
   <script>
     function app() {
       return {
         authenticated: false,
-        apiKeyInput: '',
-        apiKey: '',
+        loginForm: { username: '', password: '' },
         loginError: '',
+        loginLoading: false,
+        token: '',
         globalError: '',
+
+        activeTab: 'branches',
+        currentUsername: '',
+        currentRole: '',
+        currentUserID: null,
 
         branches: [],
         branchQueues: {},
@@ -243,53 +371,94 @@
         resetTarget: null,
         deleteTarget: null,
 
+        adminUsers: [],
+        openCreateUser: false,
+        editingUser: null,
+        userForm: { username: '', password: '', role: 'admin' },
+        userModalError: '',
+        deleteUserTarget: null,
+
         init() {
-          const saved = localStorage.getItem('wayt_api_key')
+          const saved = localStorage.getItem('wayt_token')
           if (saved) {
-            this.apiKey = saved
+            this.token = saved
+            this.parseToken(saved)
             this.authenticated = true
             this.loadBranches()
           }
         },
 
+        parseToken(token) {
+          try {
+            const payload = JSON.parse(atob(token.split('.')[1]))
+            this.currentUsername = payload.username || ''
+            this.currentRole     = payload.role || ''
+            this.currentUserID   = payload.sub || null
+          } catch (_) {}
+        },
+
         async login() {
           this.loginError = ''
-          const res = await fetch('/internal/branches', {
-            headers: { 'X-Internal-Key': this.apiKeyInput }
-          })
-          if (res.ok) {
-            this.apiKey = this.apiKeyInput
-            localStorage.setItem('wayt_api_key', this.apiKey)
-            this.authenticated = true
+          this.loginLoading = true
+          try {
+            const res = await fetch('/auth/login', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(this.loginForm),
+            })
             const json = await res.json()
-            this.branches = json.data || []
-            this.branches.forEach(b => this.loadQueue(b.id))
-          } else {
-            this.loginError = 'API key salah atau tidak valid.'
+            if (res.ok) {
+              this.token = json.data.token
+              localStorage.setItem('wayt_token', this.token)
+              this.parseToken(this.token)
+              this.authenticated = true
+              this.loginForm = { username: '', password: '' }
+              this.loadBranches()
+            } else {
+              this.loginError = 'Username atau password salah.'
+            }
+          } catch (e) {
+            this.loginError = 'Tidak dapat terhubung ke server.'
+          } finally {
+            this.loginLoading = false
           }
         },
 
         logout() {
-          localStorage.removeItem('wayt_api_key')
+          localStorage.removeItem('wayt_token')
           this.authenticated = false
-          this.apiKey = ''
-          this.apiKeyInput = ''
+          this.token = ''
           this.branches = []
+          this.currentUsername = ''
+          this.currentRole = ''
+          this.currentUserID = null
+          this.activeTab = 'branches'
         },
 
         headers() {
-          return { 'Content-Type': 'application/json', 'X-Internal-Key': this.apiKey }
+          return { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + this.token }
+        },
+
+        async apiFetch(url, options = {}) {
+          const res = await fetch(url, { ...options, headers: this.headers() })
+          if (res.status === 401) {
+            this.logout()
+            return null
+          }
+          return res
         },
 
         async loadBranches() {
-          const res = await fetch('/internal/branches', { headers: this.headers() })
+          const res = await this.apiFetch('/internal/branches')
+          if (!res) return
           const json = await res.json()
           this.branches = json.data || []
           this.branches.forEach(b => this.loadQueue(b.id))
         },
 
         async loadQueue(branchId) {
-          const res = await fetch(`/internal/branches/${branchId}/queue`, { headers: this.headers() })
+          const res = await this.apiFetch(`/internal/branches/${branchId}/queue`)
+          if (!res) return
           const json = await res.json()
           this.branchQueues = { ...this.branchQueues, [branchId]: json.data || [] }
         },
@@ -300,9 +469,8 @@
 
         async generateQR(branch) {
           this.globalError = ''
-          const res = await fetch(`/internal/branches/${branch.id}/qr`, {
-            method: 'POST', headers: this.headers()
-          })
+          const res = await this.apiFetch(`/internal/branches/${branch.id}/qr`, { method: 'POST' })
+          if (!res) return
           const json = await res.json()
           if (res.ok) {
             this.qrResults = { ...this.qrResults, [branch.id]: json.data }
@@ -313,9 +481,8 @@
 
         async callNext(branch) {
           this.globalError = ''
-          const res = await fetch(`/internal/branches/${branch.id}/next`, {
-            method: 'POST', headers: this.headers()
-          })
+          const res = await this.apiFetch(`/internal/branches/${branch.id}/next`, { method: 'POST' })
+          if (!res) return
           const json = await res.json()
           if (res.ok) {
             this.calledQueue = { ...this.calledQueue, [branch.id]: json.data }
@@ -332,10 +499,8 @@
 
         confirmReset(branch) { this.resetTarget = branch },
         async doReset() {
-          const res = await fetch(`/internal/branches/${this.resetTarget.id}/reset`, {
-            method: 'POST', headers: this.headers()
-          })
-          if (res.ok) {
+          const res = await this.apiFetch(`/internal/branches/${this.resetTarget.id}/reset`, { method: 'POST' })
+          if (res && res.ok) {
             await this.loadBranches()
             const updated = { ...this.qrResults }
             delete updated[this.resetTarget.id]
@@ -346,9 +511,7 @@
 
         confirmDelete(branch) { this.deleteTarget = branch },
         async doDelete() {
-          await fetch(`/internal/branches/${this.deleteTarget.id}`, {
-            method: 'DELETE', headers: this.headers()
-          })
+          await this.apiFetch(`/internal/branches/${this.deleteTarget.id}`, { method: 'DELETE' })
           await this.loadBranches()
           this.deleteTarget = null
         },
@@ -373,14 +536,15 @@
           }
           let res
           if (this.editingBranch) {
-            res = await fetch(`/internal/branches/${this.editingBranch.id}`, {
-              method: 'PUT', headers: this.headers(), body: JSON.stringify(this.branchForm)
+            res = await this.apiFetch(`/internal/branches/${this.editingBranch.id}`, {
+              method: 'PUT', body: JSON.stringify(this.branchForm)
             })
           } else {
-            res = await fetch('/internal/branches', {
-              method: 'POST', headers: this.headers(), body: JSON.stringify(this.branchForm)
+            res = await this.apiFetch('/internal/branches', {
+              method: 'POST', body: JSON.stringify(this.branchForm)
             })
           }
+          if (!res) return
           if (res.ok) {
             await this.loadBranches()
             this.closeModal()
@@ -388,6 +552,62 @@
             const json = await res.json()
             this.modalError = json.message || 'Gagal menyimpan'
           }
+        },
+
+        async loadUsers() {
+          const res = await this.apiFetch('/internal/users')
+          if (!res) return
+          const json = await res.json()
+          this.adminUsers = json.data || []
+        },
+
+        editUser(u) {
+          this.editingUser = u
+          this.userForm = { username: u.username, password: '', role: u.role }
+        },
+
+        closeUserModal() {
+          this.openCreateUser = false
+          this.editingUser = null
+          this.userForm = { username: '', password: '', role: 'admin' }
+          this.userModalError = ''
+        },
+
+        async saveUser() {
+          this.userModalError = ''
+          if (!this.userForm.username) {
+            this.userModalError = 'Username wajib diisi.'
+            return
+          }
+          if (!this.editingUser && !this.userForm.password) {
+            this.userModalError = 'Password wajib diisi.'
+            return
+          }
+          let res
+          if (this.editingUser) {
+            res = await this.apiFetch(`/internal/users/${this.editingUser.id}`, {
+              method: 'PUT', body: JSON.stringify(this.userForm)
+            })
+          } else {
+            res = await this.apiFetch('/internal/users', {
+              method: 'POST', body: JSON.stringify(this.userForm)
+            })
+          }
+          if (!res) return
+          if (res.ok) {
+            await this.loadUsers()
+            this.closeUserModal()
+          } else {
+            const json = await res.json()
+            this.userModalError = json.message || 'Gagal menyimpan'
+          }
+        },
+
+        confirmDeleteUser(u) { this.deleteUserTarget = u },
+        async doDeleteUser() {
+          const res = await this.apiFetch(`/internal/users/${this.deleteUserTarget.id}`, { method: 'DELETE' })
+          if (res && res.ok) await this.loadUsers()
+          this.deleteUserTarget = null
         },
 
         formatDate(str) {

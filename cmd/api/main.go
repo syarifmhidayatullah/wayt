@@ -37,16 +37,27 @@ func main() {
 	branchRepo := repository.NewBranchRepository(db)
 	qrRepo := repository.NewQRCodeRepository(db)
 	queueRepo := repository.NewQueueRepository(db)
+	adminRepo := repository.NewAdminUserRepository(db)
 
 	// Services
 	branchSvc := service.NewBranchService(branchRepo)
 	qrSvc := service.NewQRCodeService(qrRepo, branchRepo, cfg.QR)
 	queueSvc := service.NewQueueService(queueRepo, qrRepo, branchRepo)
+	authSvc := service.NewAuthService(adminRepo, cfg.Auth.JWTSecret)
+
+	// Seed default admin jika belum ada
+	if cfg.Auth.AdminPassword != "" {
+		if err := authSvc.SeedAdmin(cfg.Auth.AdminUsername, cfg.Auth.AdminPassword); err != nil {
+			log.Printf("seed admin skipped: %v", err)
+		}
+	}
 
 	// Handlers
 	branchHandler := handler.NewBranchHandler(branchSvc)
 	qrHandler := handler.NewQRCodeHandler(qrSvc)
 	queueHandler := handler.NewQueueHandler(queueSvc)
+	authHandler := handler.NewAuthHandler(authSvc)
+	adminUserHandler := handler.NewAdminUserHandler(authSvc)
 
 	if cfg.AppEnv == "production" {
 		gin.SetMode(gin.ReleaseMode)
@@ -57,9 +68,21 @@ func main() {
 	r.LoadHTMLGlob("web/templates/*")
 	r.Static("/storage/qr", cfg.QR.StoragePath)
 
-	// Internal routes (protected by API key)
-	internal := r.Group("/internal", middleware.InternalAuth(cfg.Internal.APIKey))
+	// Auth routes (public)
+	r.POST("/auth/login", authHandler.Login)
+
+	// Internal routes (protected by JWT)
+	internal := r.Group("/internal", middleware.JWTAuth(cfg.Auth.JWTSecret))
 	{
+		// User management — superadmin only
+		users := internal.Group("/users", middleware.SuperAdminOnly())
+		{
+			users.GET("", adminUserHandler.List)
+			users.POST("", adminUserHandler.Create)
+			users.PUT("/:id", adminUserHandler.Update)
+			users.DELETE("/:id", adminUserHandler.Delete)
+		}
+
 		branches := internal.Group("/branches")
 		{
 			branches.POST("", branchHandler.Create)
