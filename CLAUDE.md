@@ -7,7 +7,7 @@ Aplikasi antrian berbasis QR code. Monolith, solo developer, backend Go + fronte
 - **Language**: Go 1.22+
 - **Framework**: Gin
 - **ORM**: GORM
-- **Database**: MySQL
+- **Database**: PostgreSQL
 - **Frontend**: HTML + Alpine.js + Tailwind CSS (via CDN, no build step)
 - **QR Generator**: `skip2/go-qrcode`
 - **Auth**: JWT (`golang-jwt/jwt/v5`) + bcrypt
@@ -23,7 +23,7 @@ wayt/
 │   ├── service/                 # Business logic
 │   ├── repository/              # Database queries (GORM)
 │   └── model/                   # Struct + TableName()
-├── migrations/                  # DDL SQL files (jalankan manual ke MySQL)
+├── migrations/                  # DDL SQL files (jalankan manual ke PostgreSQL)
 ├── pkg/
 │   ├── middleware/auth.go       # JWTAuth + SuperAdminOnly middleware
 │   └── response/response.go    # Helper JSON response standar
@@ -48,7 +48,7 @@ APP_PORT=8080
 APP_ENV=development
 
 DB_HOST=127.0.0.1
-DB_PORT=3306
+DB_PORT=5432
 DB_USER=
 DB_PASSWORD=
 DB_NAME=wayt
@@ -67,17 +67,20 @@ QR_EXPIRED_HOURS=24
 ## Menjalankan
 
 ```bash
-# 1. Setup database (jalankan berurutan)
-mysql -u root -p wayt < migrations/001_create_branches.sql
-mysql -u root -p wayt < migrations/002_create_qr_codes.sql
-mysql -u root -p wayt < migrations/003_create_queues.sql
-mysql -u root -p wayt < migrations/004_create_admin_users.sql
-mysql -u root -p wayt < migrations/005_add_role_to_admin_users.sql
+# 1. Buat database
+createdb wayt
 
-# 2. Copy dan isi env
+# 2. Jalankan migration berurutan
+psql -U wayt_svc -d wayt -f migrations/001_create_branches.sql
+psql -U wayt_svc -d wayt -f migrations/002_create_qr_codes.sql
+psql -U wayt_svc -d wayt -f migrations/003_create_queues.sql
+psql -U wayt_svc -d wayt -f migrations/004_create_admin_users.sql
+psql -U wayt_svc -d wayt -f migrations/005_add_role_to_admin_users.sql
+
+# 3. Copy dan isi env
 cp .env.example .env
 
-# 3. Run (gunakan CGO_ENABLED=0 di macOS Sequoia/Tahoe)
+# 4. Run (gunakan CGO_ENABLED=0 di macOS Sequoia/Tahoe)
 CGO_ENABLED=0 go run ./cmd/api/main.go
 ```
 

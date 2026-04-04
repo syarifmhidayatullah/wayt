@@ -50,7 +50,7 @@ func Load() (*Config, error) {
 		AppEnv:  getEnv("APP_ENV", "development"),
 		DB: DBConfig{
 			Host:     getEnv("DB_HOST", "127.0.0.1"),
-			Port:     getEnv("DB_PORT", "3306"),
+			Port:     getEnv("DB_PORT", "5432"),
 			User:     getEnv("DB_USER", "root"),
 			Password: getEnv("DB_PASSWORD", ""),
 			Name:     getEnv("DB_NAME", "wayt"),
@@ -70,8 +70,8 @@ func Load() (*Config, error) {
 }
 
 func (c *DBConfig) DSN() string {
-	return fmt.Sprintf("%s:%s@tcp(%s:%s)/%s?charset=utf8mb4&parseTime=True&loc=Local",
-		c.User, c.Password, c.Host, c.Port, c.Name,
+	return fmt.Sprintf("host=%s user=%s password=%s dbname=%s port=%s sslmode=disable TimeZone=Asia/Jakarta",
+		c.Host, c.User, c.Password, c.Name, c.Port,
 	)
 }
 

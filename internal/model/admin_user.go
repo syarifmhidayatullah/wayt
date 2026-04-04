@@ -10,12 +10,12 @@ const (
 )
 
 type AdminUser struct {
-	ID        uint      `gorm:"primaryKey;autoIncrement" json:"id"`
+	ID        uint      `gorm:"primaryKey;autoIncrement"      json:"id"`
 	Username  string    `gorm:"size:100;not null;uniqueIndex" json:"username"`
-	Role      AdminRole `gorm:"type:enum('superadmin','admin');default:'admin'" json:"role"`
-	Password  string    `gorm:"size:255;not null" json:"-"`
-	CreatedAt time.Time `json:"created_at"`
-	UpdatedAt time.Time `json:"updated_at"`
+	Role      AdminRole `gorm:"type:admin_role;default:'admin'" json:"role"`
+	Password  string    `gorm:"size:255;not null"             json:"-"`
+	CreatedAt time.Time `                                     json:"created_at"`
+	UpdatedAt time.Time `                                     json:"updated_at"`
 }
 
 func (AdminUser) TableName() string { return "admin_users" }

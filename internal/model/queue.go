@@ -16,7 +16,7 @@ type Queue struct {
 	BranchID    uint        `gorm:"not null;index"           json:"branch_id"`
 	QRToken     string      `gorm:"size:36;not null;index"   json:"qr_token"`
 	QueueNumber string      `gorm:"size:20;not null"         json:"queue_number"`
-	Status      QueueStatus `gorm:"type:enum('waiting','called','done','expired');default:'waiting'" json:"status"`
+	Status      QueueStatus `gorm:"type:queue_status;default:'waiting'" json:"status"`
 	CreatedAt   time.Time   `                                json:"created_at"`
 	UpdatedAt   time.Time   `                                json:"updated_at"`
 

@@ -11,7 +11,7 @@ import (
 	"github.com/project/wayt/internal/repository"
 	"github.com/project/wayt/internal/service"
 	"github.com/project/wayt/pkg/middleware"
-	"gorm.io/driver/mysql"
+	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
 )
@@ -22,7 +22,7 @@ func main() {
 		log.Fatalf("failed to load config: %v", err)
 	}
 
-	db, err := gorm.Open(mysql.Open(cfg.DB.DSN()), &gorm.Config{
+	db, err := gorm.Open(postgres.Open(cfg.DB.DSN()), &gorm.Config{
 		Logger: logger.Default.LogMode(logger.Info),
 	})
 	if err != nil {
