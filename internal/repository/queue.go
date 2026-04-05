@@ -80,6 +80,6 @@ func (r *queueRepository) FindNextWaiting(counterID uint) (*model.Queue, error) 
 
 func (r *queueRepository) ExpireByCounter(counterID uint) error {
 	return r.db.Model(&model.Queue{}).
-		Where("counter_id = ? AND status = 'waiting'", counterID).
+		Where("counter_id = ? AND status IN ('waiting','called')", counterID).
 		Update("status", model.QueueStatusExpired).Error
 }
