@@ -99,17 +99,21 @@ Saat server pertama kali start, jika tabel `admin_users` kosong dan `ADMIN_PASSW
 | Method | Endpoint | Role | Fungsi |
 |--------|----------|------|--------|
 | GET | `/internal/users` | superadmin | List admin users |
-| POST | `/internal/users` | superadmin | Buat admin user baru |
+| POST | `/internal/users` | superadmin | Buat admin user baru (sertakan `branch_id` untuk role admin) |
 | PUT | `/internal/users/:id` | superadmin | Update user |
 | DELETE | `/internal/users/:id` | superadmin | Hapus user |
-| POST | `/internal/branches` | all | Buat branch |
-| GET | `/internal/branches` | all | List branch |
-| PUT | `/internal/branches/:id` | all | Update branch |
-| DELETE | `/internal/branches/:id` | all | Hapus branch |
-| POST | `/internal/branches/:id/qr` | all | Generate QR code |
-| POST | `/internal/branches/:id/next` | all | Panggil antrian berikutnya |
-| GET | `/internal/branches/:id/queue` | all | List antrian aktif |
-| POST | `/internal/branches/:id/reset` | all | Reset antrian & nomor |
+| GET | `/internal/branches` | all | List branch (admin: hanya branch-nya) |
+| POST | `/internal/branches` | superadmin | Buat branch |
+| PUT | `/internal/branches/:id` | superadmin | Update branch |
+| DELETE | `/internal/branches/:id` | superadmin | Hapus branch |
+| GET | `/internal/branches/:branch_id/counters` | all | List counter dalam branch |
+| POST | `/internal/branches/:branch_id/counters` | all | Buat counter baru |
+| PUT | `/internal/counters/:id` | all | Update counter |
+| DELETE | `/internal/counters/:id` | all | Hapus counter |
+| POST | `/internal/counters/:id/qr` | all | Generate QR code untuk counter |
+| POST | `/internal/counters/:id/next` | all | Panggil antrian berikutnya |
+| GET | `/internal/counters/:id/queue` | all | List antrian aktif di counter |
+| POST | `/internal/counters/:id/reset` | all | Reset antrian & nomor counter |
 
 ### Public
 
@@ -138,18 +142,25 @@ Setiap orang mendapat URL `/queue/{id}` yang berbeda untuk memantau posisinya.
 ## Model Data
 
 ### Branch
-Cabang/loket antrian. Punya `prefix` (e.g. "A"), `current_number` (sedang dilayani), `last_number` (total yang sudah daftar). Soft delete via kolom `deleted_at`.
+Lokasi/departemen. Hanya punya `name` dan `is_active`. Soft delete via `deleted_at`.
+- Superadmin bisa membuat/edit/hapus branch.
+- Admin hanya bisa melihat 1 branch yang ditetapkan untuknya.
+
+### Counter
+Loket/service point dalam sebuah Branch. Punya `branch_id`, `name`, `prefix` (e.g. "A"), `current_number`, `last_number`. Soft delete.
+- 1 Branch bisa punya banyak Counter dengan prefix berbeda.
+- QR code dan antrian digenerate per Counter.
 
 ### QRCode
-Satu QR per generate. Punya `token` (UUID), `expired_at`, `is_active`. Bisa di-reset via endpoint reset branch.
+Satu QR per generate. Punya `branch_id`, `counter_id`, `token` (UUID), `expired_at`, `is_active`.
 
 ### Queue
-Satu entri per pendaftar. Status: `waiting → called → done` atau `expired` (saat reset).
+Satu entri per pendaftar. Punya `branch_id`, `counter_id`. Status: `waiting → called → done` atau `expired` (saat reset).
 
 ### AdminUser
-User untuk login ke admin panel. Role: `superadmin` atau `admin`.
-- `superadmin` — akses semua fitur termasuk kelola user
-- `admin` — hanya manage branches & antrian
+User untuk login ke admin panel. Role: `superadmin` atau `admin`. Punya `branch_id` (nullable).
+- `superadmin` — akses semua branch, kelola user, buat/edit/hapus branch
+- `admin` — hanya bisa manage counter & antrian di branch yang ditetapkan. `branch_id` wajib diisi.
 
 ## Auth Flow
 

@@ -20,26 +20,26 @@ type QRCodeResult struct {
 }
 
 type QRCodeService interface {
-	Generate(branchID uint) (*QRCodeResult, error)
+	Generate(counterID uint) (*QRCodeResult, error)
 }
 
 type qrCodeService struct {
-	qrRepo     repository.QRCodeRepository
-	branchRepo repository.BranchRepository
-	cfg        config.QRConfig
+	qrRepo      repository.QRCodeRepository
+	counterRepo repository.CounterRepository
+	cfg         config.QRConfig
 }
 
-func NewQRCodeService(qrRepo repository.QRCodeRepository, branchRepo repository.BranchRepository, cfg config.QRConfig) QRCodeService {
-	return &qrCodeService{qrRepo: qrRepo, branchRepo: branchRepo, cfg: cfg}
+func NewQRCodeService(qrRepo repository.QRCodeRepository, counterRepo repository.CounterRepository, cfg config.QRConfig) QRCodeService {
+	return &qrCodeService{qrRepo: qrRepo, counterRepo: counterRepo, cfg: cfg}
 }
 
-func (s *qrCodeService) Generate(branchID uint) (*QRCodeResult, error) {
-	branch, err := s.branchRepo.FindByID(branchID)
+func (s *qrCodeService) Generate(counterID uint) (*QRCodeResult, error) {
+	counter, err := s.counterRepo.FindByID(counterID)
 	if err != nil {
-		return nil, errors.New("branch not found")
+		return nil, errors.New("counter not found")
 	}
-	if !branch.IsActive {
-		return nil, errors.New("branch is not active")
+	if !counter.IsActive {
+		return nil, errors.New("counter is not active")
 	}
 
 	token := uuid.New().String()
@@ -48,14 +48,14 @@ func (s *qrCodeService) Generate(branchID uint) (*QRCodeResult, error) {
 	filename := fmt.Sprintf("%s.png", token)
 	filePath := filepath.Join(s.cfg.StoragePath, filename)
 
-	// QR content is a URL; scanning it directly registers the queue via GET /q/:token
 	qrContent := fmt.Sprintf("%s/q/%s", s.cfg.PublicBaseURL, token)
 	if err := qrcode.WriteFile(qrContent, qrcode.Medium, 256, filePath); err != nil {
 		return nil, fmt.Errorf("failed to generate QR image: %w", err)
 	}
 
 	qr := &model.QRCode{
-		BranchID:  branchID,
+		BranchID:  counter.BranchID,
+		CounterID: counterID,
 		Token:     token,
 		IsActive:  true,
 		ExpiredAt: expiredAt,

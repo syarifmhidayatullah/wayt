@@ -35,14 +35,16 @@ func main() {
 
 	// Repositories
 	branchRepo := repository.NewBranchRepository(db)
+	counterRepo := repository.NewCounterRepository(db)
 	qrRepo := repository.NewQRCodeRepository(db)
 	queueRepo := repository.NewQueueRepository(db)
 	adminRepo := repository.NewAdminUserRepository(db)
 
 	// Services
 	branchSvc := service.NewBranchService(branchRepo)
-	qrSvc := service.NewQRCodeService(qrRepo, branchRepo, cfg.QR)
-	queueSvc := service.NewQueueService(queueRepo, qrRepo, branchRepo)
+	counterSvc := service.NewCounterService(counterRepo, branchRepo)
+	qrSvc := service.NewQRCodeService(qrRepo, counterRepo, cfg.QR)
+	queueSvc := service.NewQueueService(queueRepo, qrRepo, counterRepo)
 	authSvc := service.NewAuthService(adminRepo, cfg.Auth.JWTSecret)
 
 	// Seed default admin jika belum ada
@@ -54,7 +56,7 @@ func main() {
 
 	// Handlers
 	branchHandler := handler.NewBranchHandler(branchSvc)
-	qrHandler := handler.NewQRCodeHandler(qrSvc)
+	counterHandler := handler.NewCounterHandler(counterSvc, qrSvc, queueSvc)
 	queueHandler := handler.NewQueueHandler(queueSvc)
 	authHandler := handler.NewAuthHandler(authSvc)
 	adminUserHandler := handler.NewAdminUserHandler(authSvc)
@@ -83,17 +85,25 @@ func main() {
 			users.DELETE("/:id", adminUserHandler.Delete)
 		}
 
-		branches := internal.Group("/branches")
+		// Branch management — superadmin only for create/update/delete
+		// List is available to all (filtered by role in handler)
+		internal.GET("/branches", branchHandler.List)
+		superBranches := internal.Group("/branches", middleware.SuperAdminOnly())
 		{
-			branches.POST("", branchHandler.Create)
-			branches.GET("", branchHandler.List)
-			branches.PUT("/:id", branchHandler.Update)
-			branches.DELETE("/:id", branchHandler.Delete)
-			branches.POST("/:id/qr", qrHandler.Generate)
-			branches.POST("/:id/next", queueHandler.CallNext)
-			branches.GET("/:id/queue", queueHandler.ListByBranch)
-			branches.POST("/:id/reset", queueHandler.Reset)
+			superBranches.POST("", branchHandler.Create)
+			superBranches.PUT("/:id", branchHandler.Update)
+			superBranches.DELETE("/:id", branchHandler.Delete)
 		}
+
+		// Counter management — admin restricted to their branch (checked in handler)
+		internal.POST("/branches/:branch_id/counters", counterHandler.Create)
+		internal.GET("/branches/:branch_id/counters", counterHandler.ListByBranch)
+		internal.PUT("/counters/:id", counterHandler.Update)
+		internal.DELETE("/counters/:id", counterHandler.Delete)
+		internal.POST("/counters/:id/qr", counterHandler.GenerateQR)
+		internal.POST("/counters/:id/next", counterHandler.CallNext)
+		internal.GET("/counters/:id/queue", counterHandler.ListQueue)
+		internal.POST("/counters/:id/reset", counterHandler.Reset)
 	}
 
 	// Public routes

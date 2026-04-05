@@ -12,15 +12,17 @@ const (
 )
 
 type Queue struct {
-	ID          uint        `gorm:"primaryKey;autoIncrement" json:"id"`
-	BranchID    uint        `gorm:"not null;index"           json:"branch_id"`
-	QRToken     string      `gorm:"size:36;not null;index"   json:"qr_token"`
-	QueueNumber string      `gorm:"size:20;not null"         json:"queue_number"`
+	ID          uint        `gorm:"primaryKey;autoIncrement"           json:"id"`
+	BranchID    uint        `gorm:"not null;index"                     json:"branch_id"`
+	CounterID   uint        `gorm:"not null;index"                     json:"counter_id"`
+	QRToken     string      `gorm:"size:36;not null;index"             json:"qr_token"`
+	QueueNumber string      `gorm:"size:20;not null"                   json:"queue_number"`
 	Status      QueueStatus `gorm:"type:queue_status;default:'waiting'" json:"status"`
-	CreatedAt   time.Time   `                                json:"created_at"`
-	UpdatedAt   time.Time   `                                json:"updated_at"`
+	CreatedAt   time.Time   `                                          json:"created_at"`
+	UpdatedAt   time.Time   `                                          json:"updated_at"`
 
-	Branch *Branch `gorm:"foreignKey:BranchID" json:"branch,omitempty"`
+	Branch  *Branch  `gorm:"foreignKey:BranchID"  json:"branch,omitempty"`
+	Counter *Counter `gorm:"foreignKey:CounterID" json:"counter,omitempty"`
 }
 
 func (Queue) TableName() string { return "queues" }

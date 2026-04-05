@@ -8,8 +8,8 @@ import (
 type QRCodeRepository interface {
 	Create(qr *model.QRCode) error
 	FindByToken(token string) (*model.QRCode, error)
-	FindActiveByBranch(branchID uint) ([]model.QRCode, error)
-	DeactivateByBranch(branchID uint) error
+	FindActiveByCounter(counterID uint) ([]model.QRCode, error)
+	DeactivateByCounter(counterID uint) error
 }
 
 type qrCodeRepository struct {
@@ -26,22 +26,22 @@ func (r *qrCodeRepository) Create(qr *model.QRCode) error {
 
 func (r *qrCodeRepository) FindByToken(token string) (*model.QRCode, error) {
 	var qr model.QRCode
-	err := r.db.Preload("Branch").Where("token = ?", token).First(&qr).Error
+	err := r.db.Preload("Branch").Preload("Counter").Where("token = ?", token).First(&qr).Error
 	if err != nil {
 		return nil, err
 	}
 	return &qr, nil
 }
 
-func (r *qrCodeRepository) FindActiveByBranch(branchID uint) ([]model.QRCode, error) {
+func (r *qrCodeRepository) FindActiveByCounter(counterID uint) ([]model.QRCode, error) {
 	var qrs []model.QRCode
-	err := r.db.Where("branch_id = ? AND is_active = true AND expired_at > NOW()", branchID).
+	err := r.db.Where("counter_id = ? AND is_active = true AND expired_at > NOW()", counterID).
 		Find(&qrs).Error
 	return qrs, err
 }
 
-func (r *qrCodeRepository) DeactivateByBranch(branchID uint) error {
+func (r *qrCodeRepository) DeactivateByCounter(counterID uint) error {
 	return r.db.Model(&model.QRCode{}).
-		Where("branch_id = ?", branchID).
+		Where("counter_id = ?", counterID).
 		Update("is_active", false).Error
 }

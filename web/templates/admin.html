@@ -84,142 +84,175 @@
     <!-- Error banner -->
     <div x-show="globalError" class="bg-red-50 border border-red-200 rounded-xl p-4 mb-4 text-red-600 text-sm" x-text="globalError"></div>
 
-    <!-- ===== TAB: BRANCHES ===== -->
+    <!-- ===== TAB: BRANCHES + COUNTERS ===== -->
     <div x-show="activeTab === 'branches'">
-    <div class="flex justify-end mb-4">
-      <button
-        @click="openCreateBranch = true"
-        class="bg-blue-600 text-white px-4 py-2 rounded-xl text-sm font-semibold hover:bg-blue-700 transition"
-      >+ Branch</button>
-    </div>
 
-    <!-- Branch list -->
-    <div x-show="branches.length === 0" class="bg-white rounded-2xl shadow p-8 text-center text-gray-400 text-sm">
-      Belum ada branch. Klik <strong>+ Branch</strong> untuk membuat.
-    </div>
+      <!-- Superadmin: tambah branch -->
+      <div x-show="currentRole === 'superadmin'" class="flex justify-end mb-4">
+        <button
+          @click="openCreateBranch = true"
+          class="bg-blue-600 text-white px-4 py-2 rounded-xl text-sm font-semibold hover:bg-blue-700 transition"
+        >+ Branch</button>
+      </div>
 
-    <template x-for="branch in branches" :key="branch.id">
-      <div class="bg-white rounded-2xl shadow mb-4 overflow-hidden">
+      <!-- No branches -->
+      <div x-show="branches.length === 0" class="bg-white rounded-2xl shadow p-8 text-center text-gray-400 text-sm">
+        <template x-if="currentRole === 'superadmin'">
+          <span>Belum ada branch. Klik <strong>+ Branch</strong> untuk membuat.</span>
+        </template>
+        <template x-if="currentRole !== 'superadmin'">
+          <span>Akun Anda belum dikaitkan ke branch. Hubungi superadmin.</span>
+        </template>
+      </div>
 
-        <!-- Branch header -->
-        <div class="flex items-center justify-between px-6 py-4 border-b border-gray-100">
-          <div class="flex items-center gap-3">
-            <span
-              class="w-3 h-3 rounded-full"
-              :class="branch.is_active ? 'bg-green-400' : 'bg-gray-300'"
-            ></span>
-            <div>
-              <span class="font-semibold text-gray-800" x-text="branch.name"></span>
-              <span class="ml-2 text-xs bg-gray-100 text-gray-500 px-2 py-0.5 rounded-full" x-text="'Prefix: ' + branch.prefix"></span>
+      <!-- Branch list -->
+      <template x-for="branch in branches" :key="branch.id">
+        <div class="bg-white rounded-2xl shadow mb-6 overflow-hidden">
+
+          <!-- Branch header -->
+          <div class="flex items-center justify-between px-6 py-4 bg-gray-50 border-b border-gray-100">
+            <div class="flex items-center gap-3">
+              <span
+                class="w-3 h-3 rounded-full"
+                :class="branch.is_active ? 'bg-green-400' : 'bg-gray-300'"
+              ></span>
+              <span class="font-bold text-gray-800 text-lg" x-text="branch.name"></span>
+            </div>
+            <div x-show="currentRole === 'superadmin'" class="flex gap-2 items-center">
+              <button @click="editBranch(branch)" class="text-xs text-blue-500 hover:underline">Edit</button>
+              <button @click="confirmDeleteBranch(branch)" class="text-xs text-red-400 hover:underline">Hapus</button>
             </div>
           </div>
-          <div class="flex gap-2">
-            <button
-              @click="editBranch(branch)"
-              class="text-xs text-blue-500 hover:underline"
-            >Edit</button>
-            <button
-              @click="confirmDelete(branch)"
-              class="text-xs text-red-400 hover:underline"
-            >Hapus</button>
-          </div>
-        </div>
 
-        <!-- Branch stats -->
-        <div class="grid grid-cols-3 divide-x divide-gray-100 border-b border-gray-100">
-          <div class="px-6 py-3 text-center">
-            <p class="text-xs text-gray-400">Sedang Dilayani</p>
-            <p class="text-xl font-bold text-gray-700" x-text="branch.prefix + '-' + String(branch.current_number).padStart(3,'0')"></p>
-          </div>
-          <div class="px-6 py-3 text-center">
-            <p class="text-xs text-gray-400">Total Antrian</p>
-            <p class="text-xl font-bold text-gray-700" x-text="branch.last_number"></p>
-          </div>
-          <div class="px-6 py-3 text-center">
-            <p class="text-xs text-gray-400">Menunggu</p>
-            <p class="text-xl font-bold text-blue-600" x-text="(branchQueues[branch.id] || []).filter(q => q.status === 'waiting').length"></p>
-          </div>
-        </div>
-
-        <!-- Actions -->
-        <div class="flex flex-wrap gap-2 px-6 py-4 border-b border-gray-100">
-          <button
-            @click="generateQR(branch)"
-            :disabled="isActionLoading(branch.id, 'qr')"
-            class="bg-indigo-50 text-indigo-600 px-4 py-2 rounded-xl text-sm font-medium hover:bg-indigo-100 transition disabled:opacity-50 flex items-center gap-2"
-          >
-            <svg x-show="isActionLoading(branch.id, 'qr')" class="animate-spin w-3.5 h-3.5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"></path></svg>
-            <span x-text="isActionLoading(branch.id, 'qr') ? 'Generating...' : 'Generate QR'"></span>
-          </button>
-          <button
-            @click="callNext(branch)"
-            :disabled="(branchQueues[branch.id] || []).filter(q => q.status === 'waiting').length === 0 || isActionLoading(branch.id, 'next')"
-            class="bg-green-50 text-green-600 px-4 py-2 rounded-xl text-sm font-medium hover:bg-green-100 transition disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-2"
-          >
-            <svg x-show="isActionLoading(branch.id, 'next')" class="animate-spin w-3.5 h-3.5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"></path></svg>
-            <span x-text="isActionLoading(branch.id, 'next') ? 'Memanggil...' : 'Panggil Berikutnya'"></span>
-          </button>
-          <button
-            @click="confirmReset(branch)"
-            class="bg-red-50 text-red-500 px-4 py-2 rounded-xl text-sm font-medium hover:bg-red-100 transition"
-          >Reset Antrian</button>
-          <button
-            @click="refreshQueue(branch.id)"
-            :disabled="isActionLoading(branch.id, 'refresh')"
-            class="bg-gray-50 text-gray-500 px-4 py-2 rounded-xl text-sm font-medium hover:bg-gray-100 transition disabled:opacity-50 flex items-center gap-2"
-          >
-            <svg x-show="isActionLoading(branch.id, 'refresh')" class="animate-spin w-3.5 h-3.5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"></path></svg>
-            <span x-text="isActionLoading(branch.id, 'refresh') ? 'Memuat...' : 'Refresh'"></span>
-          </button>
-        </div>
-
-        <!-- QR result -->
-        <div x-show="qrResults[branch.id]" class="px-6 py-4 border-b border-gray-100 bg-indigo-50">
-          <div class="flex items-center gap-4">
-            <img :src="(qrResults[branch.id] || {}).qr_image_url" class="w-24 h-24 rounded-lg border border-indigo-200" />
-            <div>
-              <p class="text-xs text-indigo-600 font-semibold mb-1">QR berhasil dibuat</p>
-              <p class="text-xs text-gray-500 break-all" x-text="(qrResults[branch.id] || {}).token"></p>
-              <p class="text-xs text-gray-400 mt-1">Expired: <span x-text="formatDate((qrResults[branch.id] || {}).expired_at)"></span></p>
-              <a :href="(qrResults[branch.id] || {}).qr_image_url" download class="text-xs text-indigo-500 hover:underline mt-1 inline-block">Download QR</a>
+          <!-- Counter list for this branch -->
+          <div class="px-6 py-4">
+            <div class="flex items-center justify-between mb-3">
+              <p class="text-xs text-gray-400 font-semibold uppercase tracking-widest">Loket / Counter</p>
+              <button
+                @click="openAddCounter(branch)"
+                class="text-xs bg-blue-50 text-blue-600 px-3 py-1 rounded-lg hover:bg-blue-100 transition"
+              >+ Counter</button>
             </div>
-          </div>
-        </div>
 
-        <!-- Called notification -->
-        <div x-show="calledQueue[branch.id]" class="px-6 py-3 bg-green-50 border-b border-gray-100">
-          <p class="text-sm text-green-700 font-semibold">
-            Memanggil: <span x-text="(calledQueue[branch.id] || {}).queue_number"></span>
-          </p>
-        </div>
+            <div x-show="(branchCounters[branch.id] || []).length === 0" class="text-gray-300 text-sm py-2">
+              Belum ada counter. Klik <strong>+ Counter</strong> untuk membuat.
+            </div>
 
-        <!-- Queue list -->
-        <div class="px-6 py-4">
-          <p class="text-xs text-gray-400 font-semibold uppercase tracking-widest mb-3">Antrian Aktif</p>
-          <div x-show="(branchQueues[branch.id] || []).length === 0" class="text-gray-300 text-sm">Belum ada antrian</div>
-          <div class="space-y-2">
-            <template x-for="q in (branchQueues[branch.id] || [])" :key="q.id">
-              <div class="flex items-center justify-between bg-gray-50 rounded-xl px-4 py-2">
-                <span class="font-mono font-semibold text-gray-700 text-sm" x-text="q.queue_number"></span>
-                <span
-                  class="text-xs px-2 py-0.5 rounded-full"
-                  :class="{
-                    'bg-yellow-100 text-yellow-600': q.status === 'waiting',
-                    'bg-green-100 text-green-600':   q.status === 'called',
-                    'bg-gray-100 text-gray-400':     q.status === 'done' || q.status === 'expired'
-                  }"
-                  x-text="q.status"
-                ></span>
+            <template x-for="counter in (branchCounters[branch.id] || [])" :key="counter.id">
+              <div class="border border-gray-100 rounded-xl mb-3 overflow-hidden">
+
+                <!-- Counter header -->
+                <div class="flex items-center justify-between px-4 py-3 bg-gray-50 border-b border-gray-100">
+                  <div class="flex items-center gap-2">
+                    <span
+                      class="w-2 h-2 rounded-full"
+                      :class="counter.is_active ? 'bg-green-400' : 'bg-gray-300'"
+                    ></span>
+                    <span class="font-semibold text-gray-700 text-sm" x-text="counter.name"></span>
+                    <span class="text-xs bg-gray-100 text-gray-500 px-2 py-0.5 rounded-full" x-text="'Prefix: ' + counter.prefix"></span>
+                  </div>
+                  <div class="flex gap-2">
+                    <button @click="editCounter(counter)" class="text-xs text-blue-500 hover:underline">Edit</button>
+                    <button @click="confirmDeleteCounter(counter)" class="text-xs text-red-400 hover:underline">Hapus</button>
+                  </div>
+                </div>
+
+                <!-- Counter stats -->
+                <div class="grid grid-cols-3 divide-x divide-gray-100 border-b border-gray-100">
+                  <div class="px-4 py-3 text-center">
+                    <p class="text-xs text-gray-400">Dilayani</p>
+                    <p class="text-lg font-bold text-gray-700" x-text="counter.prefix + '-' + String(counter.current_number).padStart(3,'0')"></p>
+                  </div>
+                  <div class="px-4 py-3 text-center">
+                    <p class="text-xs text-gray-400">Total</p>
+                    <p class="text-lg font-bold text-gray-700" x-text="counter.last_number"></p>
+                  </div>
+                  <div class="px-4 py-3 text-center">
+                    <p class="text-xs text-gray-400">Menunggu</p>
+                    <p class="text-lg font-bold text-blue-600" x-text="(counterQueues[counter.id] || []).filter(q => q.status === 'waiting').length"></p>
+                  </div>
+                </div>
+
+                <!-- Counter actions -->
+                <div class="flex flex-wrap gap-2 px-4 py-3 border-b border-gray-100">
+                  <button
+                    @click="generateQR(counter)"
+                    :disabled="isActionLoading(counter.id, 'qr')"
+                    class="bg-indigo-50 text-indigo-600 px-3 py-1.5 rounded-lg text-xs font-medium hover:bg-indigo-100 transition disabled:opacity-50 flex items-center gap-1.5"
+                  >
+                    <svg x-show="isActionLoading(counter.id, 'qr')" class="animate-spin w-3 h-3" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"></path></svg>
+                    <span x-text="isActionLoading(counter.id, 'qr') ? 'Generating...' : 'Generate QR'"></span>
+                  </button>
+                  <button
+                    @click="callNext(counter)"
+                    :disabled="(counterQueues[counter.id] || []).filter(q => q.status === 'waiting').length === 0 || isActionLoading(counter.id, 'next')"
+                    class="bg-green-50 text-green-600 px-3 py-1.5 rounded-lg text-xs font-medium hover:bg-green-100 transition disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1.5"
+                  >
+                    <svg x-show="isActionLoading(counter.id, 'next')" class="animate-spin w-3 h-3" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"></path></svg>
+                    <span x-text="isActionLoading(counter.id, 'next') ? 'Memanggil...' : 'Panggil Berikutnya'"></span>
+                  </button>
+                  <button
+                    @click="confirmResetCounter(counter)"
+                    class="bg-red-50 text-red-500 px-3 py-1.5 rounded-lg text-xs font-medium hover:bg-red-100 transition"
+                  >Reset</button>
+                  <button
+                    @click="refreshCounter(counter)"
+                    :disabled="isActionLoading(counter.id, 'refresh')"
+                    class="bg-gray-50 text-gray-500 px-3 py-1.5 rounded-lg text-xs font-medium hover:bg-gray-100 transition disabled:opacity-50 flex items-center gap-1.5"
+                  >
+                    <svg x-show="isActionLoading(counter.id, 'refresh')" class="animate-spin w-3 h-3" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"></path></svg>
+                    <span x-text="isActionLoading(counter.id, 'refresh') ? 'Memuat...' : 'Refresh'"></span>
+                  </button>
+                </div>
+
+                <!-- QR result -->
+                <div x-show="qrResults[counter.id]" class="px-4 py-3 border-b border-gray-100 bg-indigo-50">
+                  <div class="flex items-center gap-4">
+                    <img :src="(qrResults[counter.id] || {}).qr_image_url" class="w-20 h-20 rounded-lg border border-indigo-200" />
+                    <div>
+                      <p class="text-xs text-indigo-600 font-semibold mb-1">QR berhasil dibuat</p>
+                      <p class="text-xs text-gray-500 break-all" x-text="(qrResults[counter.id] || {}).token"></p>
+                      <p class="text-xs text-gray-400 mt-1">Expired: <span x-text="formatDate((qrResults[counter.id] || {}).expired_at)"></span></p>
+                      <a :href="(qrResults[counter.id] || {}).qr_image_url" download class="text-xs text-indigo-500 hover:underline mt-1 inline-block">Download QR</a>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Called notification -->
+                <div x-show="calledQueue[counter.id]" class="px-4 py-2 bg-green-50 border-b border-gray-100">
+                  <p class="text-sm text-green-700 font-semibold">
+                    Memanggil: <span x-text="(calledQueue[counter.id] || {}).queue_number"></span>
+                  </p>
+                </div>
+
+                <!-- Queue list -->
+                <div class="px-4 py-3">
+                  <div x-show="(counterQueues[counter.id] || []).length === 0" class="text-gray-300 text-xs">Belum ada antrian</div>
+                  <div class="space-y-1.5">
+                    <template x-for="q in (counterQueues[counter.id] || [])" :key="q.id">
+                      <div class="flex items-center justify-between bg-gray-50 rounded-lg px-3 py-1.5">
+                        <span class="font-mono font-semibold text-gray-700 text-sm" x-text="q.queue_number"></span>
+                        <span
+                          class="text-xs px-2 py-0.5 rounded-full"
+                          :class="{
+                            'bg-yellow-100 text-yellow-600': q.status === 'waiting',
+                            'bg-green-100 text-green-600':   q.status === 'called',
+                            'bg-gray-100 text-gray-400':     q.status === 'done' || q.status === 'expired'
+                          }"
+                          x-text="q.status"
+                        ></span>
+                      </div>
+                    </template>
+                  </div>
+                </div>
+
               </div>
             </template>
           </div>
+
         </div>
-
-      </div>
-    </template>
-  </div>
-
-    </div> <!-- end tab branches -->
+      </template>
+    </div>
 
     <!-- ===== TAB: USERS ===== -->
     <div x-show="activeTab === 'users'">
@@ -240,6 +273,7 @@
             <tr>
               <th class="px-6 py-3 text-left">Username</th>
               <th class="px-6 py-3 text-left">Role</th>
+              <th class="px-6 py-3 text-left">Branch</th>
               <th class="px-6 py-3 text-left">Dibuat</th>
               <th class="px-6 py-3"></th>
             </tr>
@@ -255,6 +289,7 @@
                     x-text="u.role"
                   ></span>
                 </td>
+                <td class="px-6 py-4 text-gray-500 text-xs" x-text="branchNameByID(u.branch_id)"></td>
                 <td class="px-6 py-4 text-gray-400" x-text="formatDate(u.created_at)"></td>
                 <td class="px-6 py-4 text-right">
                   <div class="flex justify-end gap-3">
@@ -271,21 +306,17 @@
           </tbody>
         </table>
       </div>
-    </div> <!-- end tab users -->
+    </div>
+
+  </div> <!-- end main dashboard -->
 
   <!-- Modal: Create / Edit Branch -->
   <div x-show="openCreateBranch || editingBranch" class="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
-    <div class="bg-white rounded-2xl shadow-xl p-6 w-full max-w-sm" @click.outside="closeModal()">
+    <div class="bg-white rounded-2xl shadow-xl p-6 w-full max-w-sm" @click.outside="closeBranchModal()">
       <h2 class="font-bold text-gray-800 mb-4" x-text="editingBranch ? 'Edit Branch' : 'Buat Branch Baru'"></h2>
       <input
         x-model="branchForm.name"
-        placeholder="Nama branch (e.g. Kasir 1)"
-        class="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400 mb-3"
-      />
-      <input
-        x-model="branchForm.prefix"
-        placeholder="Prefix (e.g. A)"
-        maxlength="5"
+        placeholder="Nama branch (e.g. Cabang Pusat)"
         class="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400 mb-3"
       />
       <template x-if="editingBranch">
@@ -294,9 +325,9 @@
           Aktif
         </label>
       </template>
-      <p x-show="modalError" class="text-red-500 text-xs mb-3" x-text="modalError"></p>
+      <p x-show="branchModalError" class="text-red-500 text-xs mb-3" x-text="branchModalError"></p>
       <div class="flex gap-2">
-        <button @click="closeModal()" :disabled="savingBranch" class="flex-1 border border-gray-200 rounded-xl py-2.5 text-sm hover:bg-gray-50 disabled:opacity-50">Batal</button>
+        <button @click="closeBranchModal()" :disabled="savingBranch" class="flex-1 border border-gray-200 rounded-xl py-2.5 text-sm hover:bg-gray-50 disabled:opacity-50">Batal</button>
         <button @click="saveBranch()" :disabled="savingBranch" class="flex-1 bg-blue-600 text-white rounded-xl py-2.5 text-sm font-semibold hover:bg-blue-700 disabled:opacity-50 flex items-center justify-center gap-2">
           <svg x-show="savingBranch" class="animate-spin w-3.5 h-3.5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"></path></svg>
           <span x-text="savingBranch ? 'Menyimpan...' : 'Simpan'"></span>
@@ -305,14 +336,46 @@
     </div>
   </div>
 
-  <!-- Modal: Confirm Reset -->
-  <div x-show="resetTarget" class="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
-    <div class="bg-white rounded-2xl shadow-xl p-6 w-full max-w-sm">
-      <h2 class="font-bold text-gray-800 mb-2">Reset Antrian?</h2>
-      <p class="text-sm text-gray-500 mb-4">Semua antrian aktif di <strong x-text="(resetTarget || {}).name"></strong> akan kedaluwarsa dan nomor direset ke 0.</p>
+  <!-- Modal: Create / Edit Counter -->
+  <div x-show="openCreateCounter || editingCounter" class="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
+    <div class="bg-white rounded-2xl shadow-xl p-6 w-full max-w-sm" @click.outside="closeCounterModal()">
+      <h2 class="font-bold text-gray-800 mb-4" x-text="editingCounter ? 'Edit Counter' : 'Buat Counter Baru'"></h2>
+      <input
+        x-model="counterForm.name"
+        placeholder="Nama counter (e.g. Teller 1)"
+        class="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400 mb-3"
+      />
+      <input
+        x-model="counterForm.prefix"
+        placeholder="Prefix (e.g. A)"
+        maxlength="5"
+        class="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400 mb-3"
+      />
+      <template x-if="editingCounter">
+        <label class="flex items-center gap-2 text-sm text-gray-600 mb-3">
+          <input type="checkbox" x-model="counterForm.is_active" class="rounded" />
+          Aktif
+        </label>
+      </template>
+      <p x-show="counterModalError" class="text-red-500 text-xs mb-3" x-text="counterModalError"></p>
       <div class="flex gap-2">
-        <button @click="resetTarget = null" :disabled="loadingReset" class="flex-1 border border-gray-200 rounded-xl py-2.5 text-sm hover:bg-gray-50 disabled:opacity-50">Batal</button>
-        <button @click="doReset()" :disabled="loadingReset" class="flex-1 bg-red-500 text-white rounded-xl py-2.5 text-sm font-semibold hover:bg-red-600 disabled:opacity-50 flex items-center justify-center gap-2">
+        <button @click="closeCounterModal()" :disabled="savingCounter" class="flex-1 border border-gray-200 rounded-xl py-2.5 text-sm hover:bg-gray-50 disabled:opacity-50">Batal</button>
+        <button @click="saveCounter()" :disabled="savingCounter" class="flex-1 bg-blue-600 text-white rounded-xl py-2.5 text-sm font-semibold hover:bg-blue-700 disabled:opacity-50 flex items-center justify-center gap-2">
+          <svg x-show="savingCounter" class="animate-spin w-3.5 h-3.5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"></path></svg>
+          <span x-text="savingCounter ? 'Menyimpan...' : 'Simpan'"></span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal: Confirm Reset Counter -->
+  <div x-show="resetCounterTarget" class="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
+    <div class="bg-white rounded-2xl shadow-xl p-6 w-full max-w-sm">
+      <h2 class="font-bold text-gray-800 mb-2">Reset Counter?</h2>
+      <p class="text-sm text-gray-500 mb-4">Semua antrian aktif di <strong x-text="(resetCounterTarget || {}).name"></strong> akan kedaluwarsa dan nomor direset ke 0.</p>
+      <div class="flex gap-2">
+        <button @click="resetCounterTarget = null" :disabled="loadingReset" class="flex-1 border border-gray-200 rounded-xl py-2.5 text-sm hover:bg-gray-50 disabled:opacity-50">Batal</button>
+        <button @click="doResetCounter()" :disabled="loadingReset" class="flex-1 bg-red-500 text-white rounded-xl py-2.5 text-sm font-semibold hover:bg-red-600 disabled:opacity-50 flex items-center justify-center gap-2">
           <svg x-show="loadingReset" class="animate-spin w-3.5 h-3.5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"></path></svg>
           <span x-text="loadingReset ? 'Mereset...' : 'Reset'"></span>
         </button>
@@ -320,16 +383,31 @@
     </div>
   </div>
 
-  <!-- Modal: Confirm Delete -->
-  <div x-show="deleteTarget" class="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
+  <!-- Modal: Confirm Delete Branch -->
+  <div x-show="deleteBranchTarget" class="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
     <div class="bg-white rounded-2xl shadow-xl p-6 w-full max-w-sm">
       <h2 class="font-bold text-gray-800 mb-2">Hapus Branch?</h2>
-      <p class="text-sm text-gray-500 mb-4">Branch <strong x-text="(deleteTarget || {}).name"></strong> akan dihapus permanen.</p>
+      <p class="text-sm text-gray-500 mb-4">Branch <strong x-text="(deleteBranchTarget || {}).name"></strong> akan dihapus permanen.</p>
       <div class="flex gap-2">
-        <button @click="deleteTarget = null" :disabled="loadingDelete" class="flex-1 border border-gray-200 rounded-xl py-2.5 text-sm hover:bg-gray-50 disabled:opacity-50">Batal</button>
-        <button @click="doDelete()" :disabled="loadingDelete" class="flex-1 bg-red-500 text-white rounded-xl py-2.5 text-sm font-semibold hover:bg-red-600 disabled:opacity-50 flex items-center justify-center gap-2">
-          <svg x-show="loadingDelete" class="animate-spin w-3.5 h-3.5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"></path></svg>
-          <span x-text="loadingDelete ? 'Menghapus...' : 'Hapus'"></span>
+        <button @click="deleteBranchTarget = null" :disabled="loadingDeleteBranch" class="flex-1 border border-gray-200 rounded-xl py-2.5 text-sm hover:bg-gray-50 disabled:opacity-50">Batal</button>
+        <button @click="doDeleteBranch()" :disabled="loadingDeleteBranch" class="flex-1 bg-red-500 text-white rounded-xl py-2.5 text-sm font-semibold hover:bg-red-600 disabled:opacity-50 flex items-center justify-center gap-2">
+          <svg x-show="loadingDeleteBranch" class="animate-spin w-3.5 h-3.5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"></path></svg>
+          <span x-text="loadingDeleteBranch ? 'Menghapus...' : 'Hapus'"></span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal: Confirm Delete Counter -->
+  <div x-show="deleteCounterTarget" class="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
+    <div class="bg-white rounded-2xl shadow-xl p-6 w-full max-w-sm">
+      <h2 class="font-bold text-gray-800 mb-2">Hapus Counter?</h2>
+      <p class="text-sm text-gray-500 mb-4">Counter <strong x-text="(deleteCounterTarget || {}).name"></strong> akan dihapus permanen.</p>
+      <div class="flex gap-2">
+        <button @click="deleteCounterTarget = null" :disabled="loadingDeleteCounter" class="flex-1 border border-gray-200 rounded-xl py-2.5 text-sm hover:bg-gray-50 disabled:opacity-50">Batal</button>
+        <button @click="doDeleteCounter()" :disabled="loadingDeleteCounter" class="flex-1 bg-red-500 text-white rounded-xl py-2.5 text-sm font-semibold hover:bg-red-600 disabled:opacity-50 flex items-center justify-center gap-2">
+          <svg x-show="loadingDeleteCounter" class="animate-spin w-3.5 h-3.5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"></path></svg>
+          <span x-text="loadingDeleteCounter ? 'Menghapus...' : 'Hapus'"></span>
         </button>
       </div>
     </div>
@@ -357,6 +435,19 @@
         <option value="admin">admin</option>
         <option value="superadmin">superadmin</option>
       </select>
+      <!-- Branch selector — only relevant for admin role -->
+      <div x-show="userForm.role === 'admin'" class="mb-3">
+        <label class="block text-xs text-gray-500 mb-1">Branch (wajib untuk admin)</label>
+        <select
+          x-model="userForm.branch_id"
+          class="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
+        >
+          <option value="">-- Pilih Branch --</option>
+          <template x-for="b in allBranches" :key="b.id">
+            <option :value="b.id" x-text="b.name"></option>
+          </template>
+        </select>
+      </div>
       <p x-show="userModalError" class="text-red-500 text-xs mb-3" x-text="userModalError"></p>
       <div class="flex gap-2">
         <button @click="closeUserModal()" :disabled="savingUser" class="flex-1 border border-gray-200 rounded-xl py-2.5 text-sm hover:bg-gray-50 disabled:opacity-50">Batal</button>
@@ -399,28 +490,44 @@
         currentRole: '',
         currentUserID: null,
 
-        branches: [],
-        branchQueues: {},
-        qrResults: {},
-        calledQueue: {},
-        loadingActions: {},  // { [branchId]: { qr, next, refresh } }
+        // Branch + Counter state
+        branches: [],        // branches visible to current user
+        allBranches: [],     // all branches (for superadmin user form)
+        branchCounters: {},  // { [branchID]: Counter[] }
+        counterQueues: {},   // { [counterID]: Queue[] }
+        qrResults: {},       // { [counterID]: QRResult }
+        calledQueue: {},     // { [counterID]: Queue }
+        loadingActions: {},  // { [counterID]: { qr, next, refresh } }
 
+        // Branch modal
         openCreateBranch: false,
         editingBranch: null,
-        branchForm: { name: '', prefix: '', is_active: true },
-        modalError: '',
+        branchForm: { name: '', is_active: true },
+        branchModalError: '',
         savingBranch: false,
+        deleteBranchTarget: null,
+        loadingDeleteBranch: false,
 
-        resetTarget: null,
+        // Counter modal
+        openCreateCounter: false,
+        editingCounter: null,
+        counterTargetBranchID: null,
+        counterForm: { name: '', prefix: '', is_active: true },
+        counterModalError: '',
+        savingCounter: false,
+        deleteCounterTarget: null,
+        loadingDeleteCounter: false,
+
+        // Reset
+        resetCounterTarget: null,
         loadingReset: false,
-        deleteTarget: null,
-        loadingDelete: false,
 
+        // Users
         adminUsers: [],
         loadingUsers: false,
         openCreateUser: false,
         editingUser: null,
-        userForm: { username: '', password: '', role: 'admin' },
+        userForm: { username: '', password: '', role: 'admin', branch_id: '' },
         userModalError: '',
         savingUser: false,
         deleteUserTarget: null,
@@ -479,6 +586,9 @@
           this.authenticated = false
           this.token = ''
           this.branches = []
+          this.allBranches = []
+          this.branchCounters = {}
+          this.counterQueues = {}
           this.currentUsername = ''
           this.currentRole = ''
           this.currentUserID = null
@@ -503,121 +613,129 @@
           if (!res) return
           const json = await res.json()
           this.branches = json.data || []
-          this.branches.forEach(b => this.loadQueue(b.id))
+          this.allBranches = this.branches  // for user form dropdown
+
+          // If superadmin and no branches from filter, load all separately for user form
+          if (this.currentRole === 'superadmin') {
+            this.allBranches = this.branches
+          }
+
+          // Load counters for each branch
+          await Promise.all(this.branches.map(b => this.loadCounters(b.id)))
         },
 
-        async loadQueue(branchId) {
-          const res = await this.apiFetch(`/internal/branches/${branchId}/queue`)
+        async loadCounters(branchID) {
+          const res = await this.apiFetch(`/internal/branches/${branchID}/counters`)
           if (!res) return
           const json = await res.json()
-          this.branchQueues = { ...this.branchQueues, [branchId]: json.data || [] }
+          const counters = json.data || []
+          this.branchCounters = { ...this.branchCounters, [branchID]: counters }
+          // Load queues for each counter
+          await Promise.all(counters.map(ct => this.loadCounterQueue(ct.id)))
         },
 
-        async refreshQueue(branchId) {
-          this.setActionLoading(branchId, 'refresh', true)
-          try {
-            await this.loadBranches()
-          } finally {
-            this.setActionLoading(branchId, 'refresh', false)
-          }
+        async loadCounterQueue(counterID) {
+          const res = await this.apiFetch(`/internal/counters/${counterID}/queue`)
+          if (!res) return
+          const json = await res.json()
+          this.counterQueues = { ...this.counterQueues, [counterID]: json.data || [] }
         },
 
-        setActionLoading(branchId, key, val) {
+        setActionLoading(counterID, key, val) {
           this.loadingActions = {
             ...this.loadingActions,
-            [branchId]: { ...(this.loadingActions[branchId] || {}), [key]: val }
+            [counterID]: { ...(this.loadingActions[counterID] || {}), [key]: val }
           }
         },
 
-        isActionLoading(branchId, key) {
-          return !!(this.loadingActions[branchId] && this.loadingActions[branchId][key])
+        isActionLoading(counterID, key) {
+          return !!(this.loadingActions[counterID] && this.loadingActions[counterID][key])
         },
 
-        async generateQR(branch) {
+        async generateQR(counter) {
           this.globalError = ''
-          this.setActionLoading(branch.id, 'qr', true)
+          this.setActionLoading(counter.id, 'qr', true)
           try {
-            const res = await this.apiFetch(`/internal/branches/${branch.id}/qr`, { method: 'POST' })
+            const res = await this.apiFetch(`/internal/counters/${counter.id}/qr`, { method: 'POST' })
             if (!res) return
             const json = await res.json()
             if (res.ok) {
-              this.qrResults = { ...this.qrResults, [branch.id]: json.data }
+              this.qrResults = { ...this.qrResults, [counter.id]: json.data }
             } else {
               this.globalError = json.message || 'Gagal generate QR'
             }
           } finally {
-            this.setActionLoading(branch.id, 'qr', false)
+            this.setActionLoading(counter.id, 'qr', false)
           }
         },
 
-        async callNext(branch) {
+        async callNext(counter) {
           this.globalError = ''
-          this.setActionLoading(branch.id, 'next', true)
+          this.setActionLoading(counter.id, 'next', true)
           try {
-            const res = await this.apiFetch(`/internal/branches/${branch.id}/next`, { method: 'POST' })
+            const res = await this.apiFetch(`/internal/counters/${counter.id}/next`, { method: 'POST' })
             if (!res) return
             const json = await res.json()
             if (res.ok) {
-              this.calledQueue = { ...this.calledQueue, [branch.id]: json.data }
-              await this.loadBranches()
+              this.calledQueue = { ...this.calledQueue, [counter.id]: json.data }
+              await this.loadCounters(counter.branch_id)
               setTimeout(() => {
                 const updated = { ...this.calledQueue }
-                delete updated[branch.id]
+                delete updated[counter.id]
                 this.calledQueue = updated
               }, 5000)
             } else {
               this.globalError = json.message || 'Tidak ada antrian'
             }
           } finally {
-            this.setActionLoading(branch.id, 'next', false)
+            this.setActionLoading(counter.id, 'next', false)
           }
         },
 
-        confirmReset(branch) { this.resetTarget = branch },
-        async doReset() {
+        async refreshCounter(counter) {
+          this.setActionLoading(counter.id, 'refresh', true)
+          try {
+            await this.loadCounters(counter.branch_id)
+          } finally {
+            this.setActionLoading(counter.id, 'refresh', false)
+          }
+        },
+
+        confirmResetCounter(counter) { this.resetCounterTarget = counter },
+        async doResetCounter() {
           this.loadingReset = true
           try {
-            const res = await this.apiFetch(`/internal/branches/${this.resetTarget.id}/reset`, { method: 'POST' })
+            const res = await this.apiFetch(`/internal/counters/${this.resetCounterTarget.id}/reset`, { method: 'POST' })
             if (res && res.ok) {
-              await this.loadBranches()
+              const branchID = this.resetCounterTarget.branch_id
+              await this.loadCounters(branchID)
               const updated = { ...this.qrResults }
-              delete updated[this.resetTarget.id]
+              delete updated[this.resetCounterTarget.id]
               this.qrResults = updated
             }
           } finally {
             this.loadingReset = false
-            this.resetTarget = null
+            this.resetCounterTarget = null
           }
         },
 
-        confirmDelete(branch) { this.deleteTarget = branch },
-        async doDelete() {
-          this.loadingDelete = true
-          try {
-            await this.apiFetch(`/internal/branches/${this.deleteTarget.id}`, { method: 'DELETE' })
-            await this.loadBranches()
-          } finally {
-            this.loadingDelete = false
-            this.deleteTarget = null
-          }
-        },
-
+        // Branch CRUD
         editBranch(branch) {
           this.editingBranch = branch
-          this.branchForm = { name: branch.name, prefix: branch.prefix, is_active: branch.is_active }
+          this.branchForm = { name: branch.name, is_active: branch.is_active }
         },
 
-        closeModal() {
+        closeBranchModal() {
           this.openCreateBranch = false
           this.editingBranch = null
-          this.branchForm = { name: '', prefix: '', is_active: true }
-          this.modalError = ''
+          this.branchForm = { name: '', is_active: true }
+          this.branchModalError = ''
         },
 
         async saveBranch() {
-          this.modalError = ''
-          if (!this.branchForm.name || !this.branchForm.prefix) {
-            this.modalError = 'Nama dan prefix wajib diisi.'
+          this.branchModalError = ''
+          if (!this.branchForm.name) {
+            this.branchModalError = 'Nama branch wajib diisi.'
             return
           }
           this.savingBranch = true
@@ -635,16 +753,92 @@
             if (!res) return
             if (res.ok) {
               await this.loadBranches()
-              this.closeModal()
+              this.closeBranchModal()
             } else {
               const json = await res.json()
-              this.modalError = json.message || 'Gagal menyimpan'
+              this.branchModalError = json.message || 'Gagal menyimpan'
             }
           } finally {
             this.savingBranch = false
           }
         },
 
+        confirmDeleteBranch(branch) { this.deleteBranchTarget = branch },
+        async doDeleteBranch() {
+          this.loadingDeleteBranch = true
+          try {
+            await this.apiFetch(`/internal/branches/${this.deleteBranchTarget.id}`, { method: 'DELETE' })
+            await this.loadBranches()
+          } finally {
+            this.loadingDeleteBranch = false
+            this.deleteBranchTarget = null
+          }
+        },
+
+        // Counter CRUD
+        openAddCounter(branch) {
+          this.counterTargetBranchID = branch.id
+          this.openCreateCounter = true
+        },
+
+        editCounter(counter) {
+          this.editingCounter = counter
+          this.counterForm = { name: counter.name, prefix: counter.prefix, is_active: counter.is_active }
+        },
+
+        closeCounterModal() {
+          this.openCreateCounter = false
+          this.editingCounter = null
+          this.counterTargetBranchID = null
+          this.counterForm = { name: '', prefix: '', is_active: true }
+          this.counterModalError = ''
+        },
+
+        async saveCounter() {
+          this.counterModalError = ''
+          if (!this.counterForm.name || !this.counterForm.prefix) {
+            this.counterModalError = 'Nama dan prefix wajib diisi.'
+            return
+          }
+          this.savingCounter = true
+          try {
+            let res
+            if (this.editingCounter) {
+              res = await this.apiFetch(`/internal/counters/${this.editingCounter.id}`, {
+                method: 'PUT', body: JSON.stringify(this.counterForm)
+              })
+            } else {
+              res = await this.apiFetch(`/internal/branches/${this.counterTargetBranchID}/counters`, {
+                method: 'POST', body: JSON.stringify(this.counterForm)
+              })
+            }
+            if (!res) return
+            if (res.ok) {
+              const branchID = this.editingCounter ? this.editingCounter.branch_id : this.counterTargetBranchID
+              await this.loadCounters(branchID)
+              this.closeCounterModal()
+            } else {
+              const json = await res.json()
+              this.counterModalError = json.message || 'Gagal menyimpan'
+            }
+          } finally {
+            this.savingCounter = false
+          }
+        },
+
+        confirmDeleteCounter(counter) { this.deleteCounterTarget = counter },
+        async doDeleteCounter() {
+          this.loadingDeleteCounter = true
+          try {
+            await this.apiFetch(`/internal/counters/${this.deleteCounterTarget.id}`, { method: 'DELETE' })
+            await this.loadCounters(this.deleteCounterTarget.branch_id)
+          } finally {
+            this.loadingDeleteCounter = false
+            this.deleteCounterTarget = null
+          }
+        },
+
+        // User CRUD
         async loadUsers() {
           this.loadingUsers = true
           try {
@@ -659,13 +853,13 @@
 
         editUser(u) {
           this.editingUser = u
-          this.userForm = { username: u.username, password: '', role: u.role }
+          this.userForm = { username: u.username, password: '', role: u.role, branch_id: u.branch_id || '' }
         },
 
         closeUserModal() {
           this.openCreateUser = false
           this.editingUser = null
-          this.userForm = { username: '', password: '', role: 'admin' }
+          this.userForm = { username: '', password: '', role: 'admin', branch_id: '' }
           this.userModalError = ''
         },
 
@@ -679,16 +873,30 @@
             this.userModalError = 'Password wajib diisi.'
             return
           }
+          if (this.userForm.role === 'admin' && !this.userForm.branch_id) {
+            this.userModalError = 'Branch wajib dipilih untuk role admin.'
+            return
+          }
           this.savingUser = true
           try {
+            const payload = {
+              username: this.userForm.username,
+              password: this.userForm.password,
+              role: this.userForm.role,
+            }
+            if (this.userForm.role === 'admin' && this.userForm.branch_id) {
+              payload.branch_id = parseInt(this.userForm.branch_id)
+            } else if (this.userForm.role === 'superadmin') {
+              payload.branch_id = 0  // clear branch for superadmin
+            }
             let res
             if (this.editingUser) {
               res = await this.apiFetch(`/internal/users/${this.editingUser.id}`, {
-                method: 'PUT', body: JSON.stringify(this.userForm)
+                method: 'PUT', body: JSON.stringify(payload)
               })
             } else {
               res = await this.apiFetch('/internal/users', {
-                method: 'POST', body: JSON.stringify(this.userForm)
+                method: 'POST', body: JSON.stringify(payload)
               })
             }
             if (!res) return
@@ -714,6 +922,12 @@
             this.loadingDeleteUser = false
             this.deleteUserTarget = null
           }
+        },
+
+        branchNameByID(branchID) {
+          if (!branchID) return '-'
+          const b = this.allBranches.find(b => b.id === branchID)
+          return b ? b.name : `Branch #${branchID}`
         },
 
         formatDate(str) {

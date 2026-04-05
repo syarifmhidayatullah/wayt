@@ -8,9 +8,10 @@ import (
 )
 
 type BranchService interface {
-	Create(name, prefix string) (*model.Branch, error)
+	Create(name string) (*model.Branch, error)
 	List() ([]model.Branch, error)
-	Update(id uint, name, prefix string, isActive bool) (*model.Branch, error)
+	FindByID(id uint) (*model.Branch, error)
+	Update(id uint, name string, isActive bool) (*model.Branch, error)
 	Delete(id uint) error
 }
 
@@ -22,13 +23,12 @@ func NewBranchService(repo repository.BranchRepository) BranchService {
 	return &branchService{repo: repo}
 }
 
-func (s *branchService) Create(name, prefix string) (*model.Branch, error) {
-	if name == "" || prefix == "" {
-		return nil, errors.New("name and prefix are required")
+func (s *branchService) Create(name string) (*model.Branch, error) {
+	if name == "" {
+		return nil, errors.New("name is required")
 	}
 	branch := &model.Branch{
 		Name:     name,
-		Prefix:   prefix,
 		IsActive: true,
 	}
 	if err := s.repo.Create(branch); err != nil {
@@ -41,16 +41,21 @@ func (s *branchService) List() ([]model.Branch, error) {
 	return s.repo.FindAll()
 }
 
-func (s *branchService) Update(id uint, name, prefix string, isActive bool) (*model.Branch, error) {
+func (s *branchService) FindByID(id uint) (*model.Branch, error) {
+	branch, err := s.repo.FindByID(id)
+	if err != nil {
+		return nil, errors.New("branch not found")
+	}
+	return branch, nil
+}
+
+func (s *branchService) Update(id uint, name string, isActive bool) (*model.Branch, error) {
 	branch, err := s.repo.FindByID(id)
 	if err != nil {
 		return nil, errors.New("branch not found")
 	}
 	if name != "" {
 		branch.Name = name
-	}
-	if prefix != "" {
-		branch.Prefix = prefix
 	}
 	branch.IsActive = isActive
 	if err := s.repo.Update(branch); err != nil {

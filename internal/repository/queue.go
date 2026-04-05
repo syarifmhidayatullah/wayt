@@ -9,11 +9,11 @@ type QueueRepository interface {
 	Create(queue *model.Queue) error
 	FindByID(id uint) (*model.Queue, error)
 	FindByQRToken(token string) (*model.Queue, error)
-	FindActiveByBranch(branchID uint) ([]model.Queue, error)
-	CountWaitingAhead(branchID uint, queueID uint) (int64, error)
+	FindActiveByCounter(counterID uint) ([]model.Queue, error)
+	CountWaitingAhead(counterID uint, queueID uint) (int64, error)
 	UpdateStatus(id uint, status model.QueueStatus) error
-	FindNextWaiting(branchID uint) (*model.Queue, error)
-	ExpireByBranch(branchID uint) error
+	FindNextWaiting(counterID uint) (*model.Queue, error)
+	ExpireByCounter(counterID uint) error
 }
 
 type queueRepository struct {
@@ -30,7 +30,7 @@ func (r *queueRepository) Create(queue *model.Queue) error {
 
 func (r *queueRepository) FindByID(id uint) (*model.Queue, error) {
 	var queue model.Queue
-	err := r.db.Preload("Branch").Where("id = ?", id).First(&queue).Error
+	err := r.db.Preload("Branch").Preload("Counter").Where("id = ?", id).First(&queue).Error
 	if err != nil {
 		return nil, err
 	}
@@ -39,7 +39,7 @@ func (r *queueRepository) FindByID(id uint) (*model.Queue, error) {
 
 func (r *queueRepository) FindByQRToken(token string) (*model.Queue, error) {
 	var queue model.Queue
-	err := r.db.Preload("Branch").
+	err := r.db.Preload("Branch").Preload("Counter").
 		Where("qr_token = ? AND status IN ('waiting','called')", token).
 		First(&queue).Error
 	if err != nil {
@@ -48,17 +48,17 @@ func (r *queueRepository) FindByQRToken(token string) (*model.Queue, error) {
 	return &queue, nil
 }
 
-func (r *queueRepository) FindActiveByBranch(branchID uint) ([]model.Queue, error) {
+func (r *queueRepository) FindActiveByCounter(counterID uint) ([]model.Queue, error) {
 	var queues []model.Queue
-	err := r.db.Where("branch_id = ? AND status IN ('waiting','called')", branchID).
+	err := r.db.Where("counter_id = ? AND status IN ('waiting','called')", counterID).
 		Order("id ASC").Find(&queues).Error
 	return queues, err
 }
 
-func (r *queueRepository) CountWaitingAhead(branchID uint, queueID uint) (int64, error) {
+func (r *queueRepository) CountWaitingAhead(counterID uint, queueID uint) (int64, error) {
 	var count int64
 	err := r.db.Model(&model.Queue{}).
-		Where("branch_id = ? AND id < ? AND status = 'waiting'", branchID, queueID).
+		Where("counter_id = ? AND id < ? AND status = 'waiting'", counterID, queueID).
 		Count(&count).Error
 	return count, err
 }
@@ -68,9 +68,9 @@ func (r *queueRepository) UpdateStatus(id uint, status model.QueueStatus) error 
 		Update("status", status).Error
 }
 
-func (r *queueRepository) FindNextWaiting(branchID uint) (*model.Queue, error) {
+func (r *queueRepository) FindNextWaiting(counterID uint) (*model.Queue, error) {
 	var queue model.Queue
-	err := r.db.Where("branch_id = ? AND status = 'waiting'", branchID).
+	err := r.db.Where("counter_id = ? AND status = 'waiting'", counterID).
 		Order("id ASC").First(&queue).Error
 	if err != nil {
 		return nil, err
@@ -78,8 +78,8 @@ func (r *queueRepository) FindNextWaiting(branchID uint) (*model.Queue, error) {
 	return &queue, nil
 }
 
-func (r *queueRepository) ExpireByBranch(branchID uint) error {
+func (r *queueRepository) ExpireByCounter(counterID uint) error {
 	return r.db.Model(&model.Queue{}).
-		Where("branch_id = ? AND status = 'waiting'", branchID).
+		Where("counter_id = ? AND status = 'waiting'", counterID).
 		Update("status", model.QueueStatusExpired).Error
 }

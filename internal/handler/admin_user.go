@@ -21,12 +21,14 @@ type createUserRequest struct {
 	Username string          `json:"username" binding:"required"`
 	Password string          `json:"password" binding:"required"`
 	Role     model.AdminRole `json:"role"`
+	BranchID *uint           `json:"branch_id"`
 }
 
 type updateUserRequest struct {
 	Username string          `json:"username"`
 	Password string          `json:"password"`
 	Role     model.AdminRole `json:"role"`
+	BranchID *uint           `json:"branch_id"`
 }
 
 func (h *AdminUserHandler) List(c *gin.Context) {
@@ -44,7 +46,7 @@ func (h *AdminUserHandler) Create(c *gin.Context) {
 		response.BadRequest(c, "invalid request", err)
 		return
 	}
-	user, err := h.svc.CreateUser(req.Username, req.Password, req.Role)
+	user, err := h.svc.CreateUser(req.Username, req.Password, req.Role, req.BranchID)
 	if err != nil {
 		response.BadRequest(c, err.Error(), nil)
 		return
@@ -63,7 +65,7 @@ func (h *AdminUserHandler) Update(c *gin.Context) {
 		response.BadRequest(c, "invalid request", err)
 		return
 	}
-	user, err := h.svc.UpdateUser(uint(id), req.Username, req.Role, req.Password)
+	user, err := h.svc.UpdateUser(uint(id), req.Username, req.Role, req.Password, req.BranchID)
 	if err != nil {
 		response.BadRequest(c, err.Error(), nil)
 		return
@@ -78,7 +80,6 @@ func (h *AdminUserHandler) Delete(c *gin.Context) {
 		return
 	}
 
-	// ambil requester ID dari JWT claims
 	rawID, _ := c.Get("user_id")
 	var requesterID uint
 	if v, ok := rawID.(float64); ok {

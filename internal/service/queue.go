@@ -13,6 +13,7 @@ type RegisterResult struct {
 	QueueID     uint   `json:"queue_id"`
 	QueueNumber string `json:"queue_number"`
 	BranchName  string `json:"branch_name"`
+	CounterName string `json:"counter_name"`
 	Position    int64  `json:"position"`
 	PeopleAhead int64  `json:"people_ahead"`
 }
@@ -29,19 +30,19 @@ type QueueService interface {
 	ScanRegister(qrToken string) (*RegisterResult, error)
 	StatusByID(queueID uint) (*QueueStatusResult, error)
 	Status(qrToken string) (*QueueStatusResult, error)
-	CallNext(branchID uint) (*model.Queue, error)
-	ListByBranch(branchID uint) ([]model.Queue, error)
-	Reset(branchID uint) error
+	CallNext(counterID uint) (*model.Queue, error)
+	ListByCounter(counterID uint) ([]model.Queue, error)
+	Reset(counterID uint) error
 }
 
 type queueService struct {
-	queueRepo  repository.QueueRepository
-	qrRepo     repository.QRCodeRepository
-	branchRepo repository.BranchRepository
+	queueRepo   repository.QueueRepository
+	qrRepo      repository.QRCodeRepository
+	counterRepo repository.CounterRepository
 }
 
-func NewQueueService(queueRepo repository.QueueRepository, qrRepo repository.QRCodeRepository, branchRepo repository.BranchRepository) QueueService {
-	return &queueService{queueRepo: queueRepo, qrRepo: qrRepo, branchRepo: branchRepo}
+func NewQueueService(queueRepo repository.QueueRepository, qrRepo repository.QRCodeRepository, counterRepo repository.CounterRepository) QueueService {
+	return &queueService{queueRepo: queueRepo, qrRepo: qrRepo, counterRepo: counterRepo}
 }
 
 func (s *queueService) ScanRegister(qrToken string) (*RegisterResult, error) {
@@ -60,20 +61,21 @@ func (s *queueService) Register(qrToken string) (*RegisterResult, error) {
 		return nil, errors.New("QR code has expired")
 	}
 
-	branch, err := s.branchRepo.FindByID(qr.BranchID)
+	counter, err := s.counterRepo.FindByID(qr.CounterID)
 	if err != nil {
-		return nil, errors.New("branch not found")
+		return nil, errors.New("counter not found")
 	}
 
-	branch.LastNumber++
-	queueNumber := fmt.Sprintf("%s-%03d", branch.Prefix, branch.LastNumber)
+	counter.LastNumber++
+	queueNumber := fmt.Sprintf("%s-%03d", counter.Prefix, counter.LastNumber)
 
-	if err := s.branchRepo.Update(branch); err != nil {
+	if err := s.counterRepo.Update(counter); err != nil {
 		return nil, err
 	}
 
 	queue := &model.Queue{
-		BranchID:    branch.ID,
+		BranchID:    counter.BranchID,
+		CounterID:   counter.ID,
 		QRToken:     qrToken,
 		QueueNumber: queueNumber,
 		Status:      model.QueueStatusWaiting,
@@ -82,15 +84,21 @@ func (s *queueService) Register(qrToken string) (*RegisterResult, error) {
 		return nil, err
 	}
 
-	ahead, err := s.queueRepo.CountWaitingAhead(branch.ID, queue.ID)
+	ahead, err := s.queueRepo.CountWaitingAhead(counter.ID, queue.ID)
 	if err != nil {
 		ahead = 0
+	}
+
+	branchName := ""
+	if qr.Branch != nil {
+		branchName = qr.Branch.Name
 	}
 
 	return &RegisterResult{
 		QueueID:     queue.ID,
 		QueueNumber: queueNumber,
-		BranchName:  branch.Name,
+		BranchName:  branchName,
+		CounterName: counter.Name,
 		Position:    ahead + 1,
 		PeopleAhead: ahead,
 	}, nil
@@ -102,16 +110,16 @@ func (s *queueService) StatusByID(queueID uint) (*QueueStatusResult, error) {
 		return nil, errors.New("queue not found")
 	}
 
-	branch, err := s.branchRepo.FindByID(queue.BranchID)
+	counter, err := s.counterRepo.FindByID(queue.CounterID)
 	if err != nil {
-		return nil, errors.New("branch not found")
+		return nil, errors.New("counter not found")
 	}
 
-	currentServing := fmt.Sprintf("%s-%03d", branch.Prefix, branch.CurrentNumber)
+	currentServing := fmt.Sprintf("%s-%03d", counter.Prefix, counter.CurrentNumber)
 
 	var ahead int64
 	if queue.Status == model.QueueStatusWaiting {
-		ahead, _ = s.queueRepo.CountWaitingAhead(branch.ID, queue.ID)
+		ahead, _ = s.queueRepo.CountWaitingAhead(counter.ID, queue.ID)
 	}
 
 	return &QueueStatusResult{
@@ -128,16 +136,16 @@ func (s *queueService) Status(qrToken string) (*QueueStatusResult, error) {
 		return nil, errors.New("queue not found for this token")
 	}
 
-	branch, err := s.branchRepo.FindByID(queue.BranchID)
+	counter, err := s.counterRepo.FindByID(queue.CounterID)
 	if err != nil {
-		return nil, errors.New("branch not found")
+		return nil, errors.New("counter not found")
 	}
 
-	currentServing := fmt.Sprintf("%s-%03d", branch.Prefix, branch.CurrentNumber)
+	currentServing := fmt.Sprintf("%s-%03d", counter.Prefix, counter.CurrentNumber)
 
 	var ahead int64
 	if queue.Status == model.QueueStatusWaiting {
-		ahead, _ = s.queueRepo.CountWaitingAhead(branch.ID, queue.ID)
+		ahead, _ = s.queueRepo.CountWaitingAhead(counter.ID, queue.ID)
 	}
 
 	return &QueueStatusResult{
@@ -148,12 +156,12 @@ func (s *queueService) Status(qrToken string) (*QueueStatusResult, error) {
 	}, nil
 }
 
-func (s *queueService) CallNext(branchID uint) (*model.Queue, error) {
-	if _, err := s.branchRepo.FindByID(branchID); err != nil {
-		return nil, errors.New("branch not found")
+func (s *queueService) CallNext(counterID uint) (*model.Queue, error) {
+	if _, err := s.counterRepo.FindByID(counterID); err != nil {
+		return nil, errors.New("counter not found")
 	}
 
-	next, err := s.queueRepo.FindNextWaiting(branchID)
+	next, err := s.queueRepo.FindNextWaiting(counterID)
 	if err != nil {
 		return nil, errors.New("no waiting queue found")
 	}
@@ -161,7 +169,7 @@ func (s *queueService) CallNext(branchID uint) (*model.Queue, error) {
 	if err := s.queueRepo.UpdateStatus(next.ID, model.QueueStatusCalled); err != nil {
 		return nil, err
 	}
-	if err := s.branchRepo.IncrementCurrentNumber(branchID); err != nil {
+	if err := s.counterRepo.IncrementCurrentNumber(counterID); err != nil {
 		return nil, err
 	}
 
@@ -169,22 +177,22 @@ func (s *queueService) CallNext(branchID uint) (*model.Queue, error) {
 	return next, nil
 }
 
-func (s *queueService) ListByBranch(branchID uint) ([]model.Queue, error) {
-	if _, err := s.branchRepo.FindByID(branchID); err != nil {
-		return nil, errors.New("branch not found")
+func (s *queueService) ListByCounter(counterID uint) ([]model.Queue, error) {
+	if _, err := s.counterRepo.FindByID(counterID); err != nil {
+		return nil, errors.New("counter not found")
 	}
-	return s.queueRepo.FindActiveByBranch(branchID)
+	return s.queueRepo.FindActiveByCounter(counterID)
 }
 
-func (s *queueService) Reset(branchID uint) error {
-	if _, err := s.branchRepo.FindByID(branchID); err != nil {
-		return errors.New("branch not found")
+func (s *queueService) Reset(counterID uint) error {
+	if _, err := s.counterRepo.FindByID(counterID); err != nil {
+		return errors.New("counter not found")
 	}
-	if err := s.queueRepo.ExpireByBranch(branchID); err != nil {
+	if err := s.queueRepo.ExpireByCounter(counterID); err != nil {
 		return err
 	}
-	if err := s.qrRepo.DeactivateByBranch(branchID); err != nil {
+	if err := s.qrRepo.DeactivateByCounter(counterID); err != nil {
 		return err
 	}
-	return s.branchRepo.ResetNumbers(branchID)
+	return s.counterRepo.ResetNumbers(counterID)
 }

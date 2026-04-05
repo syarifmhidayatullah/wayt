@@ -17,13 +17,11 @@ func NewBranchHandler(svc service.BranchService) *BranchHandler {
 }
 
 type createBranchRequest struct {
-	Name   string `json:"name"   binding:"required"`
-	Prefix string `json:"prefix" binding:"required"`
+	Name string `json:"name" binding:"required"`
 }
 
 type updateBranchRequest struct {
 	Name     string `json:"name"`
-	Prefix   string `json:"prefix"`
 	IsActive *bool  `json:"is_active"`
 }
 
@@ -33,7 +31,7 @@ func (h *BranchHandler) Create(c *gin.Context) {
 		response.BadRequest(c, "invalid request", err)
 		return
 	}
-	branch, err := h.svc.Create(req.Name, req.Prefix)
+	branch, err := h.svc.Create(req.Name)
 	if err != nil {
 		response.BadRequest(c, err.Error(), nil)
 		return
@@ -41,7 +39,38 @@ func (h *BranchHandler) Create(c *gin.Context) {
 	response.Created(c, "branch created", branch)
 }
 
+// List returns branches filtered by role:
+// - superadmin: all branches
+// - admin: only their assigned branch
 func (h *BranchHandler) List(c *gin.Context) {
+	role, _ := c.Get("role")
+
+	if role == "admin" {
+		rawBranchID, exists := c.Get("branch_id")
+		if !exists || rawBranchID == nil {
+			response.OK(c, "success", []interface{}{})
+			return
+		}
+		var branchID uint
+		switch v := rawBranchID.(type) {
+		case float64:
+			branchID = uint(v)
+		case uint:
+			branchID = v
+		}
+		if branchID == 0 {
+			response.OK(c, "success", []interface{}{})
+			return
+		}
+		branch, err := h.svc.FindByID(branchID)
+		if err != nil {
+			response.OK(c, "success", []interface{}{})
+			return
+		}
+		response.OK(c, "success", []interface{}{branch})
+		return
+	}
+
 	branches, err := h.svc.List()
 	if err != nil {
 		response.InternalError(c, err)
@@ -65,7 +94,7 @@ func (h *BranchHandler) Update(c *gin.Context) {
 	if req.IsActive != nil {
 		isActive = *req.IsActive
 	}
-	branch, err := h.svc.Update(uint(id), req.Name, req.Prefix, isActive)
+	branch, err := h.svc.Update(uint(id), req.Name, isActive)
 	if err != nil {
 		response.BadRequest(c, err.Error(), nil)
 		return
