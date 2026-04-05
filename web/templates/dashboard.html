@@ -1,0 +1,418 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Wayt — Ambil Antrian</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+</head>
+<body class="bg-gray-50 min-h-screen" x-data="app()" x-init="init()">
+
+  <!-- Loading overlay -->
+  <div x-show="pageLoading" class="fixed inset-0 bg-white flex items-center justify-center z-[100]">
+    <svg class="animate-spin w-8 h-8 text-blue-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+      <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+      <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"></path>
+    </svg>
+  </div>
+
+  <!-- ===== AUTH VIEW (not logged in) ===== -->
+  <div x-show="!authenticated">
+
+    <!-- Tab switcher -->
+    <div class="max-w-sm mx-auto px-4 pt-10 pb-4">
+      <div class="text-center mb-8">
+        <h1 class="text-3xl font-extrabold text-blue-600">Wayt</h1>
+        <p class="text-gray-400 text-sm mt-1">Ambil antrian tanpa antre fisik</p>
+      </div>
+
+      <div class="flex bg-gray-100 rounded-xl p-1 mb-6">
+        <button
+          @click="authTab = 'login'"
+          :class="authTab === 'login' ? 'bg-white shadow text-gray-800' : 'text-gray-500'"
+          class="flex-1 py-2 rounded-lg text-sm font-medium transition"
+        >Masuk</button>
+        <button
+          @click="authTab = 'register'"
+          :class="authTab === 'register' ? 'bg-white shadow text-gray-800' : 'text-gray-500'"
+          class="flex-1 py-2 rounded-lg text-sm font-medium transition"
+        >Daftar</button>
+      </div>
+
+      <!-- Login form -->
+      <div x-show="authTab === 'login'" class="bg-white rounded-2xl shadow p-6">
+        <h2 class="font-bold text-gray-700 mb-4">Login</h2>
+        <input
+          x-model="loginForm.phone"
+          type="tel"
+          placeholder="Nomor Telepon"
+          class="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm mb-3 focus:outline-none focus:ring-2 focus:ring-blue-400"
+          @keydown.enter="login()"
+        />
+        <input
+          x-model="loginForm.password"
+          type="password"
+          placeholder="Password"
+          class="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm mb-3 focus:outline-none focus:ring-2 focus:ring-blue-400"
+          @keydown.enter="login()"
+        />
+        <p x-show="authError" class="text-red-500 text-xs mb-3" x-text="authError"></p>
+        <button
+          @click="login()"
+          :disabled="authLoading"
+          class="w-full bg-blue-600 text-white rounded-xl py-3 text-sm font-semibold hover:bg-blue-700 disabled:opacity-50 transition"
+        ><span x-text="authLoading ? 'Memuat...' : 'Masuk'"></span></button>
+      </div>
+
+      <!-- Register form -->
+      <div x-show="authTab === 'register'" class="bg-white rounded-2xl shadow p-6">
+        <h2 class="font-bold text-gray-700 mb-4">Buat Akun</h2>
+        <input
+          x-model="registerForm.name"
+          type="text"
+          placeholder="Nama Lengkap"
+          class="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm mb-3 focus:outline-none focus:ring-2 focus:ring-blue-400"
+        />
+        <input
+          x-model="registerForm.phone"
+          type="tel"
+          placeholder="Nomor Telepon"
+          class="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm mb-3 focus:outline-none focus:ring-2 focus:ring-blue-400"
+        />
+        <input
+          x-model="registerForm.password"
+          type="password"
+          placeholder="Password"
+          class="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm mb-3 focus:outline-none focus:ring-2 focus:ring-blue-400"
+        />
+        <p x-show="authError" class="text-red-500 text-xs mb-3" x-text="authError"></p>
+        <button
+          @click="register()"
+          :disabled="authLoading"
+          class="w-full bg-blue-600 text-white rounded-xl py-3 text-sm font-semibold hover:bg-blue-700 disabled:opacity-50 transition"
+        ><span x-text="authLoading ? 'Mendaftar...' : 'Daftar'"></span></button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== MAIN APP (logged in) ===== -->
+  <div x-show="authenticated">
+
+    <!-- Header -->
+    <div class="bg-white shadow-sm px-4 py-3 flex items-center justify-between sticky top-0 z-10">
+      <div>
+        <h1 class="text-lg font-extrabold text-blue-600">Wayt</h1>
+        <p class="text-xs text-gray-400">Halo, <span x-text="currentName"></span></p>
+      </div>
+      <button @click="logout()" class="text-xs text-gray-400 hover:text-gray-600">Keluar</button>
+    </div>
+
+    <!-- Tab bar -->
+    <div class="flex border-b border-gray-100 bg-white">
+      <button
+        @click="tab = 'search'"
+        :class="tab === 'search' ? 'border-b-2 border-blue-500 text-blue-600' : 'text-gray-400'"
+        class="flex-1 py-3 text-sm font-medium transition"
+      >Cari Antrian</button>
+      <button
+        @click="tab = 'myqueue'; loadMyQueues()"
+        :class="tab === 'myqueue' ? 'border-b-2 border-blue-500 text-blue-600' : 'text-gray-400'"
+        class="flex-1 py-3 text-sm font-medium transition"
+      >Antrian Saya</button>
+    </div>
+
+    <!-- ===== TAB: SEARCH ===== -->
+    <div x-show="tab === 'search'" class="px-4 py-4 max-w-lg mx-auto">
+
+      <!-- Search box -->
+      <div class="relative mb-4">
+        <input
+          x-model="searchQuery"
+          @input.debounce.300ms="loadBranches()"
+          type="text"
+          placeholder="Cari nama cabang..."
+          class="w-full border border-gray-200 rounded-xl pl-10 pr-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
+        />
+        <svg class="absolute left-3 top-3.5 w-4 h-4 text-gray-300" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-4.35-4.35M17 11A6 6 0 1 1 5 11a6 6 0 0 1 12 0z"/>
+        </svg>
+      </div>
+
+      <!-- Loading -->
+      <div x-show="loadingBranches" class="text-center py-8">
+        <svg class="animate-spin w-6 h-6 text-blue-400 mx-auto" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"></path></svg>
+      </div>
+
+      <!-- Empty -->
+      <div x-show="!loadingBranches && branches.length === 0" class="text-center py-12 text-gray-300 text-sm">
+        Tidak ada cabang ditemukan
+      </div>
+
+      <!-- Branch list -->
+      <template x-for="branch in branches" :key="branch.id">
+        <div class="bg-white rounded-2xl shadow mb-4 overflow-hidden">
+          <div class="px-5 py-4 border-b border-gray-50">
+            <h3 class="font-bold text-gray-800" x-text="branch.name"></h3>
+            <p class="text-xs text-gray-400 mt-0.5" x-text="branch.counters.length + ' loket tersedia'"></p>
+          </div>
+
+          <div x-show="branch.counters.length === 0" class="px-5 py-3 text-sm text-gray-300">
+            Belum ada loket aktif
+          </div>
+
+          <template x-for="counter in branch.counters" :key="counter.id">
+            <div class="flex items-center justify-between px-5 py-3 border-b border-gray-50 last:border-0">
+              <div>
+                <p class="text-sm font-semibold text-gray-700" x-text="counter.name"></p>
+                <div class="flex items-center gap-3 mt-0.5">
+                  <span class="text-xs text-gray-400">Dilayani: <strong x-text="counter.prefix + '-' + String(counter.current_number).padStart(3,'0')"></strong></span>
+                  <span class="text-xs text-gray-400">Antrian: <strong class="text-blue-600" x-text="counter.waiting_count"></strong></span>
+                </div>
+              </div>
+              <button
+                @click="bookQueue(counter)"
+                :disabled="isBooking(counter.id)"
+                class="bg-blue-600 text-white px-4 py-2 rounded-xl text-xs font-semibold hover:bg-blue-700 disabled:opacity-50 transition flex items-center gap-1.5"
+              >
+                <svg x-show="isBooking(counter.id)" class="animate-spin w-3 h-3" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"></path></svg>
+                <span x-text="isBooking(counter.id) ? '...' : 'Ambil'"></span>
+              </button>
+            </div>
+          </template>
+        </div>
+      </template>
+    </div>
+
+    <!-- ===== TAB: MY QUEUES ===== -->
+    <div x-show="tab === 'myqueue'" class="px-4 py-4 max-w-lg mx-auto">
+
+      <div x-show="loadingMyQueues" class="text-center py-8">
+        <svg class="animate-spin w-6 h-6 text-blue-400 mx-auto" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"></path></svg>
+      </div>
+
+      <div x-show="!loadingMyQueues && myQueues.length === 0" class="text-center py-12 text-gray-300 text-sm">
+        Belum ada antrian aktif
+      </div>
+
+      <template x-for="q in myQueues" :key="q.id">
+        <a :href="'/queue/' + q.id" class="block bg-white rounded-2xl shadow mb-3 px-5 py-4 hover:shadow-md transition">
+          <div class="flex items-center justify-between">
+            <div>
+              <p class="text-xs text-gray-400 mb-0.5" x-text="(q.branch && q.branch.name) || ''"></p>
+              <p class="text-xs text-gray-400" x-text="(q.counter && q.counter.name) || ''"></p>
+            </div>
+            <span
+              class="text-xs px-3 py-1 rounded-full font-semibold"
+              :class="{
+                'bg-yellow-100 text-yellow-700': q.status === 'waiting',
+                'bg-green-100  text-green-700':  q.status === 'called',
+              }"
+              x-text="q.status === 'waiting' ? 'Menunggu' : 'Dipanggil'"
+            ></span>
+          </div>
+          <p class="text-4xl font-extrabold text-blue-600 mt-2" x-text="q.queue_number"></p>
+          <p class="text-xs text-gray-300 mt-1">Tap untuk lihat status lengkap →</p>
+        </a>
+      </template>
+
+      <!-- Refresh button -->
+      <button
+        x-show="!loadingMyQueues"
+        @click="loadMyQueues()"
+        class="w-full mt-2 text-xs text-blue-400 hover:text-blue-600 py-2 transition"
+      >Refresh antrian saya</button>
+    </div>
+
+  </div>
+
+  <!-- Toast notification -->
+  <div
+    x-show="toast.show"
+    x-transition:enter="transition ease-out duration-300"
+    x-transition:enter-start="opacity-0 translate-y-4"
+    x-transition:enter-end="opacity-100 translate-y-0"
+    x-transition:leave="transition ease-in duration-200"
+    x-transition:leave-start="opacity-100"
+    x-transition:leave-end="opacity-0"
+    class="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 px-5 py-3 rounded-2xl shadow-lg text-white text-sm font-semibold"
+    :class="toast.type === 'success' ? 'bg-green-500' : 'bg-red-500'"
+    x-text="toast.message"
+  ></div>
+
+  <script>
+    function app() {
+      return {
+        authenticated: false,
+        pageLoading: true,
+        token: '',
+        currentName: '',
+
+        authTab: 'login',
+        loginForm: { phone: '', password: '' },
+        registerForm: { name: '', phone: '', password: '' },
+        authError: '',
+        authLoading: false,
+
+        tab: 'search',
+        searchQuery: '',
+        branches: [],
+        loadingBranches: false,
+        bookingCounters: {},  // { [counterID]: true }
+
+        myQueues: [],
+        loadingMyQueues: false,
+
+        toast: { show: false, message: '', type: 'success' },
+
+        init() {
+          const saved = localStorage.getItem('wayt_user_token')
+          if (saved) {
+            this.token = saved
+            this.parseToken(saved)
+            this.authenticated = true
+            this.loadBranches()
+          }
+          this.pageLoading = false
+        },
+
+        parseToken(token) {
+          try {
+            const p = JSON.parse(atob(token.split('.')[1]))
+            this.currentName = p.name || ''
+          } catch (_) {}
+        },
+
+        async login() {
+          this.authError = ''
+          this.authLoading = true
+          try {
+            const res = await fetch('/api/user/login', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(this.loginForm),
+            })
+            const json = await res.json()
+            if (res.ok) {
+              this.token = json.data.token
+              localStorage.setItem('wayt_user_token', this.token)
+              this.parseToken(this.token)
+              this.authenticated = true
+              this.loginForm = { phone: '', password: '' }
+              this.loadBranches()
+            } else {
+              this.authError = json.message || 'Login gagal.'
+            }
+          } catch (e) {
+            this.authError = 'Tidak dapat terhubung ke server.'
+          } finally {
+            this.authLoading = false
+          }
+        },
+
+        async register() {
+          this.authError = ''
+          this.authLoading = true
+          try {
+            const res = await fetch('/api/user/register', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(this.registerForm),
+            })
+            const json = await res.json()
+            if (res.ok) {
+              this.showToast('Registrasi berhasil! Silakan login.', 'success')
+              this.authTab = 'login'
+              this.loginForm.phone = this.registerForm.phone
+              this.registerForm = { name: '', phone: '', password: '' }
+            } else {
+              this.authError = json.message || 'Registrasi gagal.'
+            }
+          } catch (e) {
+            this.authError = 'Tidak dapat terhubung ke server.'
+          } finally {
+            this.authLoading = false
+          }
+        },
+
+        logout() {
+          localStorage.removeItem('wayt_user_token')
+          this.authenticated = false
+          this.token = ''
+          this.currentName = ''
+          this.branches = []
+          this.myQueues = []
+          this.tab = 'search'
+        },
+
+        headers() {
+          return { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + this.token }
+        },
+
+        async loadBranches() {
+          this.loadingBranches = true
+          try {
+            const url = this.searchQuery ? `/api/branches?search=${encodeURIComponent(this.searchQuery)}` : '/api/branches'
+            const res = await fetch(url)
+            const json = await res.json()
+            this.branches = json.data || []
+          } finally {
+            this.loadingBranches = false
+          }
+        },
+
+        async bookQueue(counter) {
+          this.bookingCounters = { ...this.bookingCounters, [counter.id]: true }
+          try {
+            const res = await fetch('/api/user/queue/book', {
+              method: 'POST',
+              headers: this.headers(),
+              body: JSON.stringify({ counter_id: counter.id }),
+            })
+            if (res.status === 401) {
+              this.logout()
+              return
+            }
+            const json = await res.json()
+            if (res.ok) {
+              const d = json.data
+              this.showToast(`Nomor antrian Anda: ${d.queue_number} (${d.people_ahead} orang di depan)`, 'success')
+              await this.loadBranches()
+              // Switch to my queues tab
+              this.tab = 'myqueue'
+              this.loadMyQueues()
+            } else {
+              this.showToast(json.message || 'Gagal mengambil antrian', 'error')
+            }
+          } finally {
+            const updated = { ...this.bookingCounters }
+            delete updated[counter.id]
+            this.bookingCounters = updated
+          }
+        },
+
+        isBooking(counterID) {
+          return !!this.bookingCounters[counterID]
+        },
+
+        async loadMyQueues() {
+          this.loadingMyQueues = true
+          try {
+            const res = await fetch('/api/user/queue', { headers: this.headers() })
+            if (res.status === 401) { this.logout(); return }
+            const json = await res.json()
+            this.myQueues = json.data || []
+          } finally {
+            this.loadingMyQueues = false
+          }
+        },
+
+        showToast(message, type = 'success') {
+          this.toast = { show: true, message, type }
+          setTimeout(() => { this.toast = { ...this.toast, show: false } }, 4000)
+        },
+      }
+    }
+  </script>
+</body>
+</html>

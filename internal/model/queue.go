@@ -21,8 +21,11 @@ type Queue struct {
 	CreatedAt   time.Time   `                                          json:"created_at"`
 	UpdatedAt   time.Time   `                                          json:"updated_at"`
 
+	UserID  *uint    `gorm:"index"                json:"user_id,omitempty"`
+
 	Branch  *Branch  `gorm:"foreignKey:BranchID"  json:"branch,omitempty"`
 	Counter *Counter `gorm:"foreignKey:CounterID" json:"counter,omitempty"`
+	User    *User    `gorm:"foreignKey:UserID"    json:"user,omitempty"`
 }
 
 func (Queue) TableName() string { return "queues" }

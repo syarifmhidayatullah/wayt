@@ -10,7 +10,9 @@ type QueueRepository interface {
 	FindByID(id uint) (*model.Queue, error)
 	FindByQRToken(token string) (*model.Queue, error)
 	FindActiveByCounter(counterID uint) ([]model.Queue, error)
+	FindActiveByUser(userID uint) ([]model.Queue, error)
 	CountWaitingAhead(counterID uint, queueID uint) (int64, error)
+	CountWaitingByCounter(counterID uint) (int64, error)
 	UpdateStatus(id uint, status model.QueueStatus) error
 	FindNextWaiting(counterID uint) (*model.Queue, error)
 	ExpireByCounter(counterID uint) error
@@ -53,6 +55,22 @@ func (r *queueRepository) FindActiveByCounter(counterID uint) ([]model.Queue, er
 	err := r.db.Where("counter_id = ? AND status IN ('waiting','called')", counterID).
 		Order("id ASC").Find(&queues).Error
 	return queues, err
+}
+
+func (r *queueRepository) FindActiveByUser(userID uint) ([]model.Queue, error) {
+	var queues []model.Queue
+	err := r.db.Preload("Branch").Preload("Counter").
+		Where("user_id = ? AND status IN ('waiting','called')", userID).
+		Order("id DESC").Find(&queues).Error
+	return queues, err
+}
+
+func (r *queueRepository) CountWaitingByCounter(counterID uint) (int64, error) {
+	var count int64
+	err := r.db.Model(&model.Queue{}).
+		Where("counter_id = ? AND status = 'waiting'", counterID).
+		Count(&count).Error
+	return count, err
 }
 
 func (r *queueRepository) CountWaitingAhead(counterID uint, queueID uint) (int64, error) {

@@ -48,6 +48,40 @@ func JWTAuth(jwtSecret string) gin.HandlerFunc {
 	}
 }
 
+// UserAuth validates JWT for regular users (type=user claim).
+func UserAuth(jwtSecret string) gin.HandlerFunc {
+	secret := []byte(jwtSecret)
+	return func(c *gin.Context) {
+		authHeader := c.GetHeader("Authorization")
+		if !strings.HasPrefix(authHeader, "Bearer ") {
+			response.Unauthorized(c)
+			c.Abort()
+			return
+		}
+		tokenStr := strings.TrimPrefix(authHeader, "Bearer ")
+		token, err := jwt.Parse(tokenStr, func(t *jwt.Token) (interface{}, error) {
+			if _, ok := t.Method.(*jwt.SigningMethodHMAC); !ok {
+				return nil, jwt.ErrSignatureInvalid
+			}
+			return secret, nil
+		})
+		if err != nil || !token.Valid {
+			response.Unauthorized(c)
+			c.Abort()
+			return
+		}
+		claims, ok := token.Claims.(jwt.MapClaims)
+		if !ok || claims["type"] != "user" {
+			response.Unauthorized(c)
+			c.Abort()
+			return
+		}
+		c.Set("user_id", claims["sub"])
+		c.Set("user_name", claims["name"])
+		c.Next()
+	}
+}
+
 // SuperAdminOnly hanya mengizinkan role superadmin. Harus dipasang setelah JWTAuth.
 func SuperAdminOnly() gin.HandlerFunc {
 	return func(c *gin.Context) {

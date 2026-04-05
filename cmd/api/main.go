@@ -40,12 +40,16 @@ func main() {
 	queueRepo := repository.NewQueueRepository(db)
 	adminRepo := repository.NewAdminUserRepository(db)
 
+	// Repositories (user)
+	userRepo := repository.NewUserRepository(db)
+
 	// Services
 	branchSvc := service.NewBranchService(branchRepo)
 	counterSvc := service.NewCounterService(counterRepo, branchRepo)
 	qrSvc := service.NewQRCodeService(qrRepo, counterRepo, cfg.QR)
-	queueSvc := service.NewQueueService(queueRepo, qrRepo, counterRepo)
+	queueSvc := service.NewQueueService(queueRepo, qrRepo, counterRepo, branchRepo)
 	authSvc := service.NewAuthService(adminRepo, cfg.Auth.JWTSecret)
+	userSvc := service.NewUserService(userRepo, cfg.Auth.JWTSecret)
 
 	// Seed default admin jika belum ada
 	if cfg.Auth.AdminPassword != "" {
@@ -60,6 +64,7 @@ func main() {
 	queueHandler := handler.NewQueueHandler(queueSvc)
 	authHandler := handler.NewAuthHandler(authSvc)
 	adminUserHandler := handler.NewAdminUserHandler(authSvc)
+	userHandler := handler.NewUserHandler(userSvc, queueSvc)
 
 	if cfg.AppEnv == "production" {
 		gin.SetMode(gin.ReleaseMode)
@@ -112,6 +117,20 @@ func main() {
 		api.POST("/queue/register", queueHandler.Register)
 		api.GET("/queue/:token/status", queueHandler.Status)
 		api.GET("/queue/id/:id/status", queueHandler.StatusByID)
+
+		// User auth
+		api.POST("/user/register", userHandler.Register)
+		api.POST("/user/login", userHandler.Login)
+
+		// Public branch listing (for user dashboard)
+		api.GET("/branches", userHandler.ListBranches)
+	}
+
+	// User authenticated routes
+	userAPI := r.Group("/api/user", middleware.UserAuth(cfg.Auth.JWTSecret))
+	{
+		userAPI.POST("/queue/book", userHandler.BookQueue)
+		userAPI.GET("/queue", userHandler.MyQueues)
 	}
 
 	// QR scan route — register lalu redirect ke /queue/:id
@@ -124,6 +143,9 @@ func main() {
 	r.GET("/admin", func(c *gin.Context) {
 		c.HTML(200, "admin.html", gin.H{})
 	})
+
+	// User dashboard page
+	r.GET("/", userHandler.DashboardPage)
 
 	addr := fmt.Sprintf(":%s", cfg.AppPort)
 	log.Printf("server running on %s", addr)
